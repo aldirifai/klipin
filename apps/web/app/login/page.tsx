@@ -1,10 +1,30 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { ApiError, api, setToken } from "@/lib/api";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginShell />}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginShell({ children }: { children?: React.ReactNode }) {
+  return (
+    <main className="flex flex-1 items-center justify-center px-6 py-16">
+      <div className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900/40 p-8">
+        {children ?? (
+          <p className="text-sm text-neutral-500">Loading...</p>
+        )}
+      </div>
+    </main>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
   const search = useSearchParams();
   const [email, setEmail] = useState("");
@@ -33,11 +53,8 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex flex-1 items-center justify-center px-6 py-16">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900/40 p-8"
-      >
+    <LoginShell>
+      <form onSubmit={handleSubmit}>
         <h1 className="mb-1 text-2xl font-bold">Login Klipin</h1>
         <p className="mb-6 text-sm text-neutral-400">
           Belum punya akun?{" "}
@@ -78,6 +95,6 @@ export default function LoginPage() {
           {loading ? "Login..." : "Login"}
         </button>
       </form>
-    </main>
+    </LoginShell>
   );
 }
