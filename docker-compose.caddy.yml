@@ -1,0 +1,33 @@
+# Optional overlay: tambah Caddy auto-HTTPS di port 80/443.
+# Pakai HANYA kalau VPS-nya kosong (port 80/443 belum dipakai aplikasi lain).
+# Activate:
+#   docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d --build
+
+services:
+  api:
+    ports: !reset []  # api gak perlu expose ke host, Caddy yang akses via network
+
+  web:
+    ports: !reset []  # sama
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - klipin
+    depends_on:
+      - api
+      - web
+
+volumes:
+  caddy_data:
+  caddy_config:
