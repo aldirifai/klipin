@@ -1,18 +1,34 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { ApiError, api, getToken } from "@/lib/api";
 
 export default function Home() {
+  const router = useRouter();
   const [url, setUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setError(null);
     if (!url.trim()) return;
+
+    if (!getToken()) {
+      sessionStorage.setItem("klipin_pending_url", url);
+      router.push("/register");
+      return;
+    }
+
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 600));
-    alert(`Klipin akan memproses:\n${url}\n\n(Pipeline aktif Day 2)`);
-    setSubmitting(false);
+    try {
+      const job = await api.createJob(url);
+      router.push(`/dashboard/${job.id}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail || err.message : "Gagal submit");
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -84,6 +100,12 @@ export default function Home() {
               {submitting ? "Memproses..." : "Klip Sekarang"}
             </button>
           </form>
+
+          {error && (
+            <p className="mx-auto mt-4 max-w-2xl rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
+              {error}
+            </p>
+          )}
 
           <p className="mt-4 text-xs text-neutral-500">
             Gratis dicoba. Tanpa watermark. Lifetime access Rp 129.000 (normal

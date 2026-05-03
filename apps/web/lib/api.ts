@@ -1,0 +1,124 @@
+// Klipin API client — typed wrapper around fetch with auth + error handling.
+
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8787";
+
+export type JobStatus =
+  | "queued"
+  | "downloading"
+  | "transcribing"
+  | "analyzing"
+  | "rendering"
+  | "done"
+  | "failed";
+
+export interface Clip {
+  id: string;
+  start_sec: number;
+  end_sec: number;
+  download_url: string | null;
+  caption: string | null;
+  hook_score: number | null;
+  reason: string | null;
+}
+
+export interface Job {
+  id: string;
+  youtube_url: string;
+  status: JobStatus;
+  duration_sec: number | null;
+  error: string | null;
+  clips: Clip[];
+}
+
+export interface User {
+  id: string;
+  email: string;
+  plan: string;
+}
+
+export interface CheckoutResponse {
+  order_id: string;
+  redirect_url: string;
+  amount_idr: number;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  token_type: string;
+}
+
+export class ApiError extends Error {
+  status: number;
+  detail?: string;
+  constructor(status: number, message: string, detail?: string) {
+    super(message);
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+const TOKEN_KEY = "klipin_token";
+
+export function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token: string): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearToken(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(TOKEN_KEY);
+}
+
+async function request<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const headers = new Headers(init.headers);
+  headers.set("Content-Type", "application/json");
+  const token = getToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const res = await fetch(`${API_URL}${path}`, { ...init, headers });
+  if (!res.ok) {
+    let detail: string | undefined;
+    try {
+      const body = await res.json();
+      detail = body?.detail ?? body?.message;
+    } catch {
+      detail = await res.text().catch(() => undefined);
+    }
+    throw new ApiError(res.status, detail ?? `HTTP ${res.status}`, detail);
+  }
+  if (res.status === 204) return undefined as T;
+  return res.json() as Promise<T>;
+}
+
+export const api = {
+  register: (email: string, password: string) =>
+    request<TokenResponse>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+  login: (email: string, password: string) =>
+    request<TokenResponse>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+  me: () => request<User>("/auth/me"),
+  createJob: (youtube_url: string) =>
+    request<Job>("/jobs", {
+      method: "POST",
+      body: JSON.stringify({ youtube_url }),
+    }),
+  listJobs: () => request<Job[]>("/jobs"),
+  getJob: (id: string) => request<Job>(`/jobs/${id}`),
+  clipUrl: (path: string) => `${API_URL}${path}`,
+  createCheckout: () =>
+    request<CheckoutResponse>("/payments/checkout", { method: "POST" }),
+};

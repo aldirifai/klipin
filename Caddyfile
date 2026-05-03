@@ -1,0 +1,22 @@
+{$DOMAIN} {
+    encode gzip zstd
+
+    # Backend API routes
+    @api path /health /auth/* /jobs/* /clips/* /payments/* /docs /openapi.json /redoc
+    handle @api {
+        reverse_proxy api:8000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    # Frontend (everything else)
+    handle {
+        reverse_proxy web:3000
+    }
+
+    log {
+        output stdout
+        format console
+    }
+}

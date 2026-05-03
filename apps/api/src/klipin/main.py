@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from klipin.config import settings
-from klipin.routers import auth, health
+from klipin.routers import auth, health, jobs, payments
 
 app = FastAPI(title="Klipin API", version="0.1.0")
 
@@ -16,3 +16,6 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(auth.router)
+app.include_router(jobs.router)
+app.include_router(jobs.clips_router)
+app.include_router(payments.router)

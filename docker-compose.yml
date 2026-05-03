@@ -1,0 +1,71 @@
+# Klipin production stack
+# Usage:
+#   1. Copy .env.production.example to .env.production, fill in values
+#   2. docker compose up -d --build
+#
+# Caddy auto-provisions HTTPS via Let's Encrypt for $DOMAIN.
+# Storage + DB persist via named volumes (klipin_storage, klipin_data).
+
+services:
+  api:
+    build:
+      context: ./apps/api
+    image: klipin-api:latest
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      STORAGE_DIR: /app/storage
+      DATABASE_URL: sqlite+aiosqlite:////app/data/klipin.db
+    volumes:
+      - klipin_storage:/app/storage
+      - klipin_data:/app/data
+    networks:
+      - klipin
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  web:
+    build:
+      context: ./apps/web
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    image: klipin-web:latest
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    networks:
+      - klipin
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - klipin
+    depends_on:
+      - api
+      - web
+
+networks:
+  klipin:
+    driver: bridge
+
+volumes:
+  klipin_storage:
+  klipin_data:
+  caddy_data:
+  caddy_config:
