@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+.next/
+out/
+.turbo/
+dist/
+build/
+.bun/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Storage (user data — never commit)
+storage/jobs/
+storage/clips/
+storage/transcripts/
+*.mp4
+*.wav
+*.mp3
+
+# DB
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
