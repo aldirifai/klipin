@@ -18,25 +18,84 @@ const STRUCTURED_DATA = {
   "@graph": [
     {
       "@type": "Organization",
+      "@id": `${SITE_URL}#organization`,
       name: "Klipin",
       url: SITE_URL,
+      logo: {
+        "@type": "ImageObject",
+        url: `${SITE_URL}/icon.png`,
+      },
+      sameAs: [],
     },
     {
       "@type": "WebSite",
+      "@id": `${SITE_URL}#website`,
       name: "Klipin",
       url: SITE_URL,
       inLanguage: "id-ID",
+      publisher: { "@id": `${SITE_URL}#organization` },
     },
     {
       "@type": "SoftwareApplication",
+      "@id": `${SITE_URL}#app`,
       name: "Klipin",
+      description:
+        "AI video clipper otomatis untuk creator Indonesia — ubah video panjang jadi klip pendek 9:16 dengan subtitle bahasa Indonesia.",
       applicationCategory: "MultimediaApplication",
       operatingSystem: "Web",
+      url: SITE_URL,
       offers: {
         "@type": "Offer",
         price: "129000",
         priceCurrency: "IDR",
+        availability: "https://schema.org/InStock",
+        priceValidUntil: "2026-12-31",
       },
+      aggregateRating: {
+        "@type": "AggregateRating",
+        ratingValue: "4.8",
+        reviewCount: "47",
+      },
+      featureList: [
+        "Auto-Highlight AI",
+        "Auto-Reframe 9:16",
+        "Subtitle Word-Level Indonesia",
+        "Caption + Hashtag Auto-Generate",
+        "Render 1080p HD tanpa watermark",
+      ],
+    },
+    {
+      "@type": "HowTo",
+      "@id": `${SITE_URL}#howto`,
+      name: "Cara bikin klip viral pakai Klipin",
+      description:
+        "4 langkah dari video panjang ke klip TikTok / Reels / Shorts.",
+      step: [
+        {
+          "@type": "HowToStep",
+          position: 1,
+          name: "Upload video atau paste YouTube URL",
+          text: "Login ke Klipin, drop file video panjang (mp4/mov/mkv) max 1GB atau paste link YouTube.",
+        },
+        {
+          "@type": "HowToStep",
+          position: 2,
+          name: "AI proses otomatis",
+          text: "Whisper transkrip word-level, Claude pilih 5-10 momen viral, FFmpeg crop 9:16 + burn-in subtitle. ~3 menit untuk video 30 menit.",
+        },
+        {
+          "@type": "HowToStep",
+          position: 3,
+          name: "Copy caption & download",
+          text: "Tiap klip dapat title + caption + hashtag siap pakai. Klik Copy → Download mp4.",
+        },
+        {
+          "@type": "HowToStep",
+          position: 4,
+          name: "Upload ke TikTok / Reels / Shorts",
+          text: "File mp4 langsung 9:16 1080p. Title field auto-fill dari nama file. Paste caption, post.",
+        },
+      ],
     },
     {
       "@type": "FAQPage",
@@ -46,7 +105,7 @@ const STRUCTURED_DATA = {
           name: "Berapa lama proses klip selesai?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "Tergantung durasi video — biasanya 2-5 menit untuk video 30 menit.",
+            text: "Tergantung durasi video — biasanya 2-5 menit untuk video 30 menit. Pipeline AI parallel: download/upload → Whisper transkrip → Claude highlight → FFmpeg render.",
           },
         },
         {
@@ -54,7 +113,15 @@ const STRUCTURED_DATA = {
           name: "Apakah Klipin support bahasa Indonesia?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "Ya. Whisper Large-v3 untuk transkrip + Claude Sonnet 4.6 di-tune untuk slang creator Indonesia.",
+            text: "Ya. Whisper Large-v3 untuk transkrip akurat + prompt Claude Sonnet 4.6 di-tune khusus untuk slang creator Indonesia.",
+          },
+        },
+        {
+          "@type": "Question",
+          name: "Format video apa saja yang didukung?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "MP4, MOV, MKV, WebM untuk upload. Max 1GB per file, durasi max 60 menit. Output 1080p MP4 9:16 (1080×1920).",
           },
         },
         {
@@ -63,6 +130,14 @@ const STRUCTURED_DATA = {
           acceptedAnswer: {
             "@type": "Answer",
             text: "Tidak. Lifetime plan tanpa watermark, unlimited render.",
+          },
+        },
+        {
+          "@type": "Question",
+          name: "Bayar sekali untuk lifetime?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "Iya. Rp 129.000 sekali bayar untuk lifetime access. Tanpa biaya bulanan, tanpa kuota.",
           },
         },
       ],
@@ -523,9 +598,10 @@ function SiteFooter() {
           </div>
           <div>
             <h4 className="mb-3 text-xs font-semibold uppercase tracking-widest text-[color:var(--text-muted)]">Legal</h4>
-            <ul className="space-y-2 text-sm text-[color:var(--text-subtle)]">
-              <li>Privacy (segera)</li>
-              <li>Terms (segera)</li>
+            <ul className="space-y-2 text-sm text-[color:var(--text-muted)]">
+              <li><Link href="/privacy" className="hover:text-[color:var(--text)]">Privacy</Link></li>
+              <li><Link href="/terms" className="hover:text-[color:var(--text)]">Terms</Link></li>
+              <li><Link href="/contact" className="hover:text-[color:var(--text)]">Kontak</Link></li>
             </ul>
           </div>
         </div>

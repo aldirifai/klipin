@@ -41,7 +41,7 @@ export const metadata: Metadata = {
     url: SITE_URL,
     title: "Klipin — AI Video Clipper untuk Creator Indonesia",
     description:
-      "Upload video panjang → klip viral 9:16 dengan subtitle animasi otomatis.",
+      "Upload video panjang → klip viral 9:16 dengan subtitle animasi otomatis. Lifetime access Rp 129.000.",
     siteName: "Klipin",
   },
   twitter: {
@@ -49,7 +49,20 @@ export const metadata: Metadata = {
     title: "Klipin — AI Video Clipper Indonesia",
     description: "Upload video panjang → klip viral 9:16 + subtitle otomatis.",
   },
-  robots: { index: true, follow: true },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
+  category: "technology",
+  applicationName: "Klipin",
+  authors: [{ name: "Klipin" }],
 };
 
 export default function RootLayout({
