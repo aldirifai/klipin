@@ -15,7 +15,7 @@ Setup default: pakai **nginx + certbot native di host** sebagai reverse proxy. D
 git clone <your-repo-url> klipin
 cd klipin
 
-cp .env.production.example .env.production
+cp .env.example .env
 # Edit: isi DOMAIN, JWT_SECRET (openssl rand -hex 32), API keys, dll
 # Pilih WEB_PORT + API_PORT yang masih kosong di VPS — default 9737 + 9787
 
@@ -79,7 +79,7 @@ Certbot otomatis edit nginx config + setup auto-renew.
 
 ## Step 4 — Update CORS & frontend env
 
-Setelah HTTPS aktif, pastikan `.env.production` ada `https://`:
+Setelah HTTPS aktif, pastikan `.env` ada `https://`:
 
 ```
 NEXT_PUBLIC_API_URL=https://klipin.id
@@ -145,7 +145,7 @@ Kalau VPS-nya kosong (port 80/443 belum dipakai), bisa skip nginx native dan pak
 docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d --build
 ```
 
-Caddy auto-provision Let's Encrypt cert via `DOMAIN` di `.env.production`. Tapi karena VPS kamu ada aplikasi lain di port 80/443, **jangan pakai overlay ini**.
+Caddy auto-provision Let's Encrypt cert via `DOMAIN` di `.env`. Tapi karena VPS kamu ada aplikasi lain di port 80/443, **jangan pakai overlay ini**.
 
 ## Troubleshooting
 
