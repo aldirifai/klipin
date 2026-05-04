@@ -157,7 +157,14 @@ export const api = {
   },
   listJobs: () => request<Job[]>("/jobs"),
   getJob: (id: string) => request<Job>(`/jobs/${id}`),
-  clipUrl: (path: string) => `${API_URL}${path}`,
+  clipUrl: (path: string) => {
+    // Append ?token=<jwt> supaya <video src> / <a download> bisa auth
+    // (browser gak kirim Authorization header buat media tags).
+    const token = getToken();
+    if (!token) return `${API_URL}${path}`;
+    const sep = path.includes("?") ? "&" : "?";
+    return `${API_URL}${path}${sep}token=${encodeURIComponent(token)}`;
+  },
   createCheckout: () =>
     request<CheckoutResponse>("/payments/checkout", { method: "POST" }),
   cookiesStatus: () => request<CookiesStatus>("/auth/cookies/status"),

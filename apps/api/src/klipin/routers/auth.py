@@ -2,7 +2,7 @@ import contextlib
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
@@ -17,6 +17,11 @@ from klipin.security import (
     hash_password,
     verify_password,
 )
+
+# Header-based scheme yang gak auto-error kalau gak ada — biar bisa fallback
+# ke query param token (untuk <video src> / <a download> yang gak bisa
+# kirim Authorization header).
+_oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 MAX_COOKIES_BYTES = 100_000  # 100 KB; cookies.txt valid biasanya <10 KB
 
@@ -71,9 +76,17 @@ async def login(
 
 
 async def current_user(
-    token: Annotated[str, Depends(oauth2_scheme)],
     db: Annotated[AsyncSession, Depends(get_session)],
+    header_token: Annotated[str | None, Depends(_oauth2_scheme_optional)] = None,
+    query_token: Annotated[str | None, Query(alias="token")] = None,
 ) -> User:
+    """JWT dari Authorization header ATAU ?token=... query param.
+
+    Query param dipakai sama media tags (<video>, <a download>) yang gak
+    bisa kirim header custom."""
+    token = header_token or query_token
+    if not token:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token tidak ada")
     user_id = decode_access_token(token)
     if not user_id:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token tidak valid")
