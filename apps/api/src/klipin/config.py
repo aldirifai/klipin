@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     storage_dir: Path = Field(default_factory=_default_storage_dir)
 
     max_input_minutes: int = 60
-    whisper_model: str = "openai/whisper"
+    whisper_model: str = "victor-upmeet/whisperx"
     claude_model: str = "claude-sonnet-4-6"
 
     anthropic_api_key: str = ""

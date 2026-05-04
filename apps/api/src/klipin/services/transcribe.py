@@ -33,22 +33,33 @@ class Transcript:
 
 
 def _parse_replicate_output(payload: dict) -> Transcript:
-    """The openai/whisper Replicate model returns:
-    {
-        "segments": [{"id": 0, "start": 0.0, "end": 2.5, "text": "...",
-                      "words": [{"word": "...", "start": 0.0, "end": 0.5}, ...]}, ...],
-        "transcription": "full text",
-        "detected_language": "indonesian"
-    }
+    """Parse output dari WhisperX (atau Whisper variant) di Replicate.
+
+    Format umum:
+        {
+            "segments": [
+                {"start": 0.0, "end": 2.5, "text": "...",
+                 "words": [{"word": "...", "start": 0.0, "end": 0.5,
+                            "score": 0.9}, ...]},
+                ...
+            ],
+            "detected_language": "id" / "indonesian"
+        }
+
+    WhisperX kadang return word object dengan key 'word', 'start', 'end'.
+    Beberapa model lain pake 'text' instead of 'word'.
     """
     segments = payload.get("segments") or []
     words: list[WordSpan] = []
     for seg in segments:
         for w in seg.get("words", []) or []:
             try:
+                word_text = str(w.get("word") or w.get("text") or "").strip()
+                if not word_text:
+                    continue
                 words.append(
                     WordSpan(
-                        word=str(w.get("word", "")).strip(),
+                        word=word_text,
                         start=float(w.get("start", 0.0)),
                         end=float(w.get("end", 0.0)),
                     )
@@ -56,7 +67,7 @@ def _parse_replicate_output(payload: dict) -> Transcript:
             except (TypeError, ValueError):
                 continue
 
-    text = str(payload.get("transcription") or "").strip()
+    text = str(payload.get("transcription") or payload.get("text") or "").strip()
     if not text and segments:
         text = " ".join(str(s.get("text", "")).strip() for s in segments).strip()
 
@@ -76,19 +87,19 @@ async def transcribe(audio_path: Path, language: str = "id") -> Transcript:
 
     client = replicate.Client(api_token=settings.replicate_api_token)
 
-    logger.info("Uploading %s to Replicate Whisper", audio_path.name)
+    logger.info("Uploading %s to Replicate %s", audio_path.name, settings.whisper_model)
     with audio_path.open("rb") as fp:
         try:
-            # wait=60 = max allowed by Replicate Prefer header. Beyond 60s,
-            # SDK auto-polls until prediction completes (no separate timeout).
+            # WhisperX input keys: audio_file (file/URL), language, align_output
+            # untuk word-level timestamps.
             output = await client.async_run(
                 settings.whisper_model,
                 input={
-                    "audio": fp,
+                    "audio_file": fp,
                     "language": language,
-                    "word_timestamps": True,
-                    "model": "large-v3",
-                    "transcription": "plain text",
+                    "align_output": True,
+                    "batch_size": 16,
+                    "diarization": False,
                 },
                 wait=60,
             )
