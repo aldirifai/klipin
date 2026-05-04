@@ -20,6 +20,7 @@ dependencies = [
     "replicate>=1.0.7",
     "aiofiles>=25.1.0",
     "numpy>=2.4.4",
+    "opencv-python-headless>=4.10",
 ]
 
 [dependency-groups]
