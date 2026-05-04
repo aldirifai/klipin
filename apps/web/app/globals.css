@@ -3,8 +3,45 @@
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: "Plus Jakarta Sans", var(--font-geist-sans), system-ui, sans-serif;
 }
 
 body {
   font-family: var(--font-sans), system-ui, sans-serif;
+  background: #09090b;
+  color: #fafafa;
+}
+
+/* Smooth scroll for in-page anchors */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Hide native scrollbar, keep functionality */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgb(63 63 70 / 0.5);
+  border-radius: 3px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Subtle shimmer for skeleton, smoother than pulse */
+@keyframes shimmer {
+  0% { background-position: -100% 0; }
+  100% { background-position: 100% 0; }
+}
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    rgb(39 39 42 / 0.5) 0%,
+    rgb(63 63 70 / 0.7) 50%,
+    rgb(39 39 42 / 0.5) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
 }

@@ -1,67 +1,157 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { api, type User } from "@/lib/api";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { ApiError, api, type User } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+
+const MAX_AUTO_ATTEMPTS = 12;
+const POLL_INTERVAL_MS = 3000;
+
+type Phase = "verifying" | "active" | "pending" | "error";
 
 export default function PaymentSuccess() {
   const [user, setUser] = useState<User | null>(null);
-  const [waiting, setWaiting] = useState(true);
+  const [phase, setPhase] = useState<Phase>("verifying");
+  const [manualLoading, setManualLoading] = useState(false);
+
+  const cancelledRef = useRef(false);
+  const attemptsRef = useRef(0);
+  const timeoutIdRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Single source of truth for "are we lifetime now?" — used by both auto-poll
+  // and manual refresh.
+  async function checkOnce(): Promise<boolean> {
+    try {
+      const u = await api.me();
+      if (cancelledRef.current) return false;
+      setUser(u);
+      if (u.plan === "lifetime") {
+        setPhase("active");
+        return true;
+      }
+      return false;
+    } catch (err) {
+      if (cancelledRef.current) return false;
+      // Don't flip to error here — auto-poll has retries; manual handler
+      // surfaces a toast separately.
+      console.warn("payment status check failed", err);
+      throw err;
+    }
+  }
 
   useEffect(() => {
-    let cancelled = false;
-    let attempts = 0;
+    cancelledRef.current = false;
 
-    const check = async () => {
-      attempts += 1;
+    const tick = async () => {
+      if (cancelledRef.current) return;
+      attemptsRef.current += 1;
       try {
-        const u = await api.me();
-        if (cancelled) return;
-        setUser(u);
-        if (u.plan === "lifetime") {
-          setWaiting(false);
-          return;
-        }
+        const ok = await checkOnce();
+        if (ok || cancelledRef.current) return;
       } catch {
-        // ignore
+        // ignore — keep polling until we exhaust attempts.
       }
-      if (attempts < 12 && !cancelled) {
-        setTimeout(check, 3000);
-      } else {
-        setWaiting(false);
+      if (cancelledRef.current) return;
+      if (attemptsRef.current >= MAX_AUTO_ATTEMPTS) {
+        setPhase("pending");
+        return;
       }
+      timeoutIdRef.current = setTimeout(tick, POLL_INTERVAL_MS);
     };
 
-    check();
+    void tick();
+
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
+      if (timeoutIdRef.current) clearTimeout(timeoutIdRef.current);
     };
   }, []);
 
+  async function handleManualCheck() {
+    setManualLoading(true);
+    try {
+      const ok = await checkOnce();
+      if (ok) {
+        toast.success("Lifetime aktif!");
+      } else {
+        toast.error("Status masih belum berubah, coba lagi sebentar.");
+      }
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.detail || err.message
+          : "Gagal cek status";
+      toast.error(msg);
+    } finally {
+      setManualLoading(false);
+    }
+  }
+
   const isLifetime = user?.plan === "lifetime";
 
+  let icon = "⏳";
+  let title = "Memverifikasi pembayaran…";
+  let description =
+    "Tunggu sebentar, biasanya butuh ~30 detik buat verifikasi dari Midtrans.";
+
+  if (isLifetime) {
+    icon = "🎉";
+    title = "Lifetime Aktif!";
+    description =
+      "Akun kamu sekarang lifetime. Mulai bikin klip viral sekarang.";
+  } else if (phase === "pending") {
+    icon = "📬";
+    title = "Pembayaran diterima";
+    description =
+      "Kalau status belum berubah dalam 5 menit, klik Cek Status atau hubungi support via WhatsApp.";
+  }
+
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center px-6 py-20 text-center">
-      <div className="mb-6 text-6xl">{isLifetime ? "🎉" : waiting ? "⏳" : "📬"}</div>
-      <h1 className="mb-3 text-3xl font-bold">
-        {isLifetime
-          ? "Lifetime Aktif!"
-          : waiting
-            ? "Memverifikasi pembayaran..."
-            : "Pembayaran diterima"}
-      </h1>
-      <p className="mb-8 max-w-md text-neutral-400">
-        {isLifetime
-          ? "Akun kamu sekarang lifetime. Mulai bikin klip viral sekarang."
-          : waiting
-            ? "Tunggu sebentar, biasanya butuh ~30 detik buat verifikasi dari Midtrans."
-            : "Kalau status belum berubah dalam 5 menit, hubungi support via WhatsApp."}
-      </p>
-      <a
-        href="/dashboard"
-        className="rounded-xl bg-gradient-to-r from-amber-400 to-rose-500 px-6 py-3 font-bold text-neutral-950"
-      >
-        Buka Dashboard
-      </a>
+    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center px-4 py-16 text-center sm:px-6 sm:py-20">
+      <Card className="w-full p-8 sm:p-10">
+        <div className="mb-6 text-6xl" aria-hidden="true">
+          {icon}
+        </div>
+        <h1 className="mb-3 font-display text-3xl font-bold tracking-tight">
+          {title}
+        </h1>
+        <p className="mb-8 text-zinc-400">{description}</p>
+
+        <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={() => {
+              window.location.href = "/dashboard";
+            }}
+            fullWidth={false}
+            className="w-full sm:w-auto"
+          >
+            Buka Dashboard
+          </Button>
+          {!isLifetime && (
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={handleManualCheck}
+              loading={manualLoading}
+              fullWidth={false}
+              className="w-full sm:w-auto"
+            >
+              Cek Status
+            </Button>
+          )}
+        </div>
+
+        {user && (
+          <p className="mt-6 text-xs text-zinc-500">
+            Login sebagai {user.email} · plan saat ini:{" "}
+            <span className="text-zinc-300">{user.plan}</span>
+          </p>
+        )}
+      </Card>
     </main>
   );
 }

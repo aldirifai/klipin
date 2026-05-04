@@ -1,27 +1,46 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { ApiError, api, type CookiesStatus } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/cn";
+
+function formatBytes(bytes: number | null): string {
+  if (bytes == null) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  return `${(kb / 1024).toFixed(2)} MB`;
+}
 
 export function CookiesPanel() {
   const [status, setStatus] = useState<CookiesStatus | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    api.cookiesStatus().then(setStatus).catch(() => setStatus({ uploaded: false, size_bytes: null, uploaded_at: null }));
+    api
+      .cookiesStatus()
+      .then(setStatus)
+      .catch(() =>
+        setStatus({ uploaded: false, size_bytes: null, uploaded_at: null }),
+      );
   }, []);
 
   async function handleUpload(file: File) {
-    setError(null);
     setBusy(true);
     try {
       const next = await api.uploadCookies(file);
       setStatus(next);
+      toast.success("Cookies ke-upload");
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail || err.message : "Upload gagal");
+      const msg =
+        err instanceof ApiError ? err.detail || err.message : "Upload gagal";
+      toast.error(msg);
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -29,13 +48,15 @@ export function CookiesPanel() {
   }
 
   async function handleDelete() {
-    setError(null);
     setBusy(true);
     try {
       await api.deleteCookies();
       setStatus({ uploaded: false, size_bytes: null, uploaded_at: null });
+      toast.success("Cookies dihapus");
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail || err.message : "Hapus gagal");
+      const msg =
+        err instanceof ApiError ? err.detail || err.message : "Hapus gagal";
+      toast.error(msg);
     } finally {
       setBusy(false);
     }
@@ -43,9 +64,15 @@ export function CookiesPanel() {
 
   if (!status) {
     return (
-      <div className="mb-6 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 text-sm text-neutral-500">
-        Loading cookies status…
-      </div>
+      <Card className="mb-6 p-5">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-10 w-10 rounded-full" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-3 w-2/3" />
+          </div>
+        </div>
+      </Card>
     );
   }
 
@@ -60,64 +87,86 @@ export function CookiesPanel() {
     : null;
 
   return (
-    <div
-      className={`mb-6 rounded-2xl border p-5 ${
+    <Card
+      className={cn(
+        "mb-6 p-5 transition-colors duration-200",
         status.uploaded
           ? "border-emerald-500/30 bg-emerald-500/5"
-          : "border-amber-500/30 bg-amber-500/5"
-      }`}
+          : "border-amber-500/30 bg-amber-500/5",
+      )}
     >
       <div className="flex items-start justify-between gap-4">
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
-            <span className={status.uploaded ? "text-emerald-300" : "text-amber-300"}>
+            <span
+              className={cn(
+                "text-base",
+                status.uploaded ? "text-emerald-300" : "text-amber-300",
+              )}
+              aria-hidden="true"
+            >
               {status.uploaded ? "🍪" : "⚠️"}
             </span>
-            <h3 className="text-sm font-bold">
+            <h3 className="font-display text-sm font-bold text-zinc-100">
               {status.uploaded
                 ? "YouTube cookies aktif"
                 : "Cookies belum di-upload"}
             </h3>
           </div>
-          <p className="text-xs text-neutral-400">
-            {status.uploaded
-              ? `Upload terakhir ${uploadedDate} · ${status.size_bytes} bytes. Cookies dipakai buat bypass YouTube anti-bot.`
-              : "YouTube blokir download dari datacenter IP. Upload cookies dari browser kamu yang udah login YouTube."}
+          <p className="text-xs leading-relaxed text-zinc-400">
+            {status.uploaded ? (
+              <>
+                Upload terakhir{" "}
+                <span className="text-zinc-300">{uploadedDate}</span> ·{" "}
+                <span className="text-zinc-300">
+                  {formatBytes(status.size_bytes)}
+                </span>
+                . Cookies dipakai buat bypass YouTube anti-bot.
+              </>
+            ) : (
+              "YouTube blokir download dari datacenter IP. Upload cookies dari browser kamu yang udah login YouTube."
+            )}
           </p>
         </div>
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => setExpanded((x) => !x)}
-          className="shrink-0 rounded-lg px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800"
+          aria-expanded={expanded}
         >
           {expanded ? "Tutup" : status.uploaded ? "Ganti" : "Setup"}
-        </button>
+        </Button>
       </div>
 
       {expanded && (
-        <div className="mt-5 border-t border-neutral-800 pt-5">
-          <details className="mb-4 rounded-lg bg-neutral-900/60 p-3 text-xs text-neutral-400">
-            <summary className="cursor-pointer font-semibold text-neutral-300">
+        <div className="mt-5 border-t border-white/5 pt-5">
+          <details className="mb-4 rounded-lg bg-zinc-900/60 p-3 text-xs text-zinc-400">
+            <summary className="cursor-pointer font-semibold text-zinc-300">
               Cara export cookies dari Firefox/Chrome
             </summary>
             <ol className="mt-3 list-inside list-decimal space-y-1.5 leading-relaxed">
-              <li>Install extension &quot;Get cookies.txt LOCALLY&quot; di browser</li>
               <li>
-                Buka <span className="font-mono">https://www.youtube.com</span> dan{" "}
-                <strong>login</strong>
+                Install extension &quot;Get cookies.txt LOCALLY&quot; di browser
               </li>
               <li>
-                Klik icon extension → klik <strong>&quot;Export As → cookies.txt&quot;</strong>
+                Buka <span className="font-mono">https://www.youtube.com</span>{" "}
+                dan <strong>login</strong>
+              </li>
+              <li>
+                Klik icon extension → klik{" "}
+                <strong>&quot;Export As → cookies.txt&quot;</strong>
               </li>
               <li>File akan ke-download — upload di sini</li>
             </ol>
-            <p className="mt-3 text-neutral-500">
-              Cookies akan auto-expire ~30 hari, upload ulang kalau download mulai gagal.
-              File disimpan terenkripsi per akun kamu.
+            <p className="mt-3 text-zinc-500">
+              Cookies akan auto-expire ~30 hari, upload ulang kalau download
+              mulai gagal. File disimpan terenkripsi per akun kamu.
             </p>
           </details>
 
           <input
             ref={fileRef}
+            id="cookies-file"
             type="file"
             accept=".txt,text/plain"
             onChange={(e) => {
@@ -125,26 +174,34 @@ export function CookiesPanel() {
               if (f) handleUpload(f);
             }}
             disabled={busy}
-            className="block w-full text-sm text-neutral-300 file:mr-3 file:rounded-lg file:border-0 file:bg-amber-400 file:px-4 file:py-2 file:text-sm file:font-bold file:text-neutral-950 hover:file:bg-amber-300 disabled:opacity-50"
+            className="sr-only"
           />
-
-          {status.uploaded && (
-            <button
-              onClick={handleDelete}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              loading={busy}
+              onClick={() => fileRef.current?.click()}
               disabled={busy}
-              className="mt-3 rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/10 disabled:opacity-50"
             >
-              Hapus cookies
-            </button>
-          )}
+              {status.uploaded ? "Ganti file cookies" : "Upload cookies.txt"}
+            </Button>
 
-          {error && (
-            <p className="mt-3 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
-              {error}
-            </p>
-          )}
+            {status.uploaded && (
+              <Button
+                type="button"
+                variant="danger"
+                size="sm"
+                onClick={handleDelete}
+                disabled={busy}
+              >
+                Hapus cookies
+              </Button>
+            )}
+          </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 }

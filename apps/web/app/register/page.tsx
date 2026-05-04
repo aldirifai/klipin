@@ -1,88 +1,237 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/cn";
 import { ApiError, api, setToken } from "@/lib/api";
 
 export default function RegisterPage() {
+  return (
+    <Suspense fallback={<RegisterShell />}>
+      <RegisterForm />
+    </Suspense>
+  );
+}
+
+function RegisterShell({ children }: { children?: React.ReactNode }) {
+  return (
+    <main className="flex flex-1 items-center justify-center px-6 py-16">
+      <div className="w-full max-w-md rounded-2xl border border-white/5 bg-zinc-900/60 p-6 backdrop-blur sm:p-8">
+        {children ?? <p className="text-sm text-zinc-500">Loading...</p>}
+      </div>
+    </main>
+  );
+}
+
+function RegisterForm() {
   const router = useRouter();
+  const search = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
-    if (password.length < 8) {
-      setError("Password minimal 8 karakter");
+    setEmailError(null);
+    setPasswordError(null);
+
+    if (!email.trim()) {
+      setEmailError("Email wajib diisi");
       return;
     }
+    if (password.length < 8) {
+      setPasswordError("Password minimal 8 karakter");
+      return;
+    }
+
     setLoading(true);
     try {
-      const { access_token } = await api.register(email, password);
+      const { access_token } = await api.register(email.trim(), password);
       setToken(access_token);
-      router.push("/dashboard");
+
+      // Determine destination: ?next= param wins, else /dashboard.
+      const next = search.get("next") || "/dashboard";
+
+      // If we have a pending URL stored from the landing page, kick off the
+      // job before redirecting so the user lands on their new job page.
+      const pending =
+        typeof window !== "undefined"
+          ? sessionStorage.getItem("klipin_pending_url")
+          : null;
+
+      if (pending) {
+        sessionStorage.removeItem("klipin_pending_url");
+        try {
+          const job = await api.createJob(pending);
+          toast.success("Akun dibuat — job dimulai");
+          router.push(`/dashboard/${job.id}`);
+          return;
+        } catch (err) {
+          // Account is created already; surface the job-creation issue but
+          // still route the user into the app.
+          const msg =
+            err instanceof ApiError
+              ? err.detail || err.message
+              : "Akun dibuat, tapi gagal mulai job. Coba lagi dari dashboard.";
+          toast.error(msg);
+          router.push(next);
+          return;
+        }
+      }
+
+      toast.success("Akun berhasil dibuat");
+      router.push(next);
     } catch (err) {
       const msg =
         err instanceof ApiError
           ? err.detail || err.message
           : "Daftar gagal";
-      setError(msg);
-    } finally {
+      // Most server errors here are duplicate-email; show on the email field
+      // for clarity, with a toast for visibility.
+      setEmailError(msg);
+      toast.error(msg);
       setLoading(false);
     }
   }
 
   return (
-    <main className="flex flex-1 items-center justify-center px-6 py-16">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900/40 p-8"
-      >
-        <h1 className="mb-1 text-2xl font-bold">Daftar Klipin</h1>
-        <p className="mb-6 text-sm text-neutral-400">
+    <RegisterShell>
+      <form onSubmit={handleSubmit} noValidate>
+        <h1 className="font-display mb-1 text-2xl font-bold tracking-tight">
+          Daftar Klipin
+        </h1>
+        <p className="mb-6 text-sm text-zinc-400">
           Sudah punya akun?{" "}
-          <a href="/login" className="text-amber-400 hover:underline">
+          <Link
+            href="/login"
+            className="font-medium text-amber-400 transition-colors hover:text-amber-300"
+          >
             Login di sini
-          </a>
+          </Link>
         </p>
 
-        <label className="mb-3 block text-sm text-neutral-300">Email</label>
-        <input
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="mb-4 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-4 py-3 outline-none focus:border-amber-400"
-        />
+        <div className="space-y-4">
+          <Input
+            id="email"
+            label="Email"
+            type="email"
+            autoComplete="email"
+            inputMode="email"
+            required
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (emailError) setEmailError(null);
+            }}
+            error={emailError ?? undefined}
+            placeholder="kamu@email.com"
+          />
 
-        <label className="mb-3 block text-sm text-neutral-300">
-          Password (min 8 karakter)
-        </label>
-        <input
-          type="password"
-          required
-          minLength={8}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="mb-6 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-4 py-3 outline-none focus:border-amber-400"
-        />
+          <div>
+            <div className="relative">
+              <Input
+                id="password"
+                label="Password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="new-password"
+                required
+                minLength={8}
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (passwordError) setPasswordError(null);
+                }}
+                error={passwordError ?? undefined}
+                className="pr-12"
+                placeholder="Minimal 8 karakter"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={
+                  showPassword ? "Sembunyikan password" : "Tampilkan password"
+                }
+                aria-pressed={showPassword}
+                className={cn(
+                  "absolute right-2 top-[34px] flex h-9 w-9 items-center justify-center rounded-lg text-zinc-400 transition-colors",
+                  "hover:bg-white/5 hover:text-zinc-100 active:scale-[0.95]",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60",
+                )}
+              >
+                {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+              </button>
+            </div>
+            {!passwordError && (
+              <p className="mt-1.5 text-xs text-zinc-500">
+                Gunakan minimal 8 karakter. Campur huruf & angka biar makin
+                aman.
+              </p>
+            )}
+          </div>
+        </div>
 
-        {error && (
-          <p className="mb-4 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
-            {error}
-          </p>
-        )}
-
-        <button
+        <Button
           type="submit"
-          disabled={loading}
-          className="w-full rounded-lg bg-gradient-to-r from-amber-400 to-rose-500 px-4 py-3 font-bold text-neutral-950 disabled:opacity-60"
+          variant="primary"
+          size="lg"
+          fullWidth
+          loading={loading}
+          className="mt-6"
         >
-          {loading ? "Mendaftar..." : "Daftar"}
-        </button>
+          {loading ? "Mendaftar" : "Daftar"}
+        </Button>
+
+        <p className="mt-4 text-center text-xs text-zinc-500">
+          Dengan mendaftar, kamu setuju memakai Klipin secara wajar.
+        </p>
       </form>
-    </main>
+    </RegisterShell>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M9.88 4.24A10.66 10.66 0 0 1 12 4c6.5 0 10 7 10 7a17.7 17.7 0 0 1-3.36 4.36" />
+      <path d="M6.61 6.61A17.7 17.7 0 0 0 2 11s3.5 7 10 7a10.6 10.6 0 0 0 4.39-.86" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+      <line x1="2" y1="2" x2="22" y2="22" />
+    </svg>
   );
 }

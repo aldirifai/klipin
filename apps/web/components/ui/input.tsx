@@ -1,0 +1,51 @@
+"use client";
+
+import { forwardRef, type InputHTMLAttributes } from "react";
+import { cn } from "@/lib/cn";
+
+interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+  error?: string;
+  label?: string;
+}
+
+export const Input = forwardRef<HTMLInputElement, InputProps>(
+  ({ className, error, label, id, ...props }, ref) => {
+    return (
+      <div className="w-full">
+        {label && (
+          <label
+            htmlFor={id}
+            className="mb-2 block text-sm font-medium text-zinc-300"
+          >
+            {label}
+          </label>
+        )}
+        <input
+          id={id}
+          ref={ref}
+          className={cn(
+            "w-full rounded-xl border bg-zinc-900 px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-500 transition-colors duration-150",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50",
+            error
+              ? "border-rose-500/60 focus-visible:border-rose-500"
+              : "border-zinc-800 focus-visible:border-amber-400/60",
+            className,
+          )}
+          aria-invalid={!!error || undefined}
+          aria-describedby={error ? `${id}-error` : undefined}
+          {...props}
+        />
+        {error && (
+          <p
+            id={`${id}-error`}
+            className="mt-1.5 text-xs text-rose-400"
+            role="alert"
+          >
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  },
+);
+Input.displayName = "Input";

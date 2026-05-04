@@ -25,7 +25,16 @@ export function useAuth() {
   return { user, loading };
 }
 
-export function logout() {
+type RouterLike = { push: (href: string) => void; replace?: (href: string) => void };
+
+/**
+ * Clears the auth token. If a `router` is provided, navigates to `redirectTo`
+ * (default "/") via the App Router so there's no full-page reload / blank flash.
+ * If no router is provided, the caller is responsible for navigating afterward.
+ */
+export function logout(router?: RouterLike, redirectTo: string = "/") {
   clearToken();
-  window.location.href = "/";
+  if (router) {
+    router.push(redirectTo);
+  }
 }
