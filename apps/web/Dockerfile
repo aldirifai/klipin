@@ -8,6 +8,11 @@ FROM oven/bun:1.3 AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# NEXT_PUBLIC_* di-inline ke client bundle saat build, bukan runtime.
+# compose.yml passes via build.args; default ke localhost untuk dev build.
+ARG NEXT_PUBLIC_API_URL=http://127.0.0.1:8787
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN bun run build
 
