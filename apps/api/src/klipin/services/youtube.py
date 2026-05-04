@@ -77,9 +77,17 @@ def _ydl_opts(out_dir: Path, max_minutes: int) -> dict:
         "fragment_retries": 5,
         "concurrent_fragment_downloads": 4,
         "extractor_args": {
-            # Coba beberapa player client; kalau yang default kena bot-check,
-            # ada fallback. android client sering work tanpa cookies.
-            "youtube": {"player_client": ["android", "web", "ios"]},
+            # Per Q4 2025, android & ios clients butuh GVS PO token (YouTube
+            # anti-bot baru). tv_simply + tv_embedded + mweb masih bypass-able
+            # tanpa token. Urutan: yang paling reliable dulu.
+            "youtube": {
+                "player_client": [
+                    "tv_simply",
+                    "tv_embedded",
+                    "mweb",
+                    "web",
+                ],
+            },
         },
     }
 
@@ -145,13 +153,14 @@ def _download_sync(url: str, out_dir: Path, max_minutes: int) -> DownloadResult:
     audio_path = out_dir / "source.mp3"
 
     if video_path is None:
-        # List apa yang ada biar gampang debug
         existing = sorted(p.name for p in out_dir.iterdir())
-        raise YoutubeError(
-            f"video file tidak ditemukan setelah yt-dlp selesai. "
-            f"Files di {out_dir.name}/: {existing or '(kosong)'}. "
-            f"Cek docker compose logs api untuk error yt-dlp."
-        )
+        hint = (
+            "YouTube blokir semua format (PO Token / bot detection). "
+            "Solusi: export cookies dari browser kamu (yt-dlp --cookies-from-browser "
+            "firefox --cookies cookies.txt URL), simpan ke server, set env "
+            "YOUTUBE_COOKIES_FILE=/app/cookies.txt + mount via docker-compose."
+        ) if not existing else f"Files yang ada: {existing}"
+        raise YoutubeError(f"Video gak ke-download. {hint}")
 
     if not audio_path.exists():
         # Audio belum ke-extract — fallback ke extract manual via ffmpeg
