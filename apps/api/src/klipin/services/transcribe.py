@@ -116,7 +116,11 @@ def _parse_replicate_output(payload: dict) -> Transcript:
 
 
 async def transcribe(audio_path: Path, language: str = "id") -> Transcript:
-    """Run Whisper on the audio file. Uploads to Replicate and waits for completion."""
+    """Run Whisper on the audio file. Uploads to Replicate and waits for completion.
+
+    Pakai explicit version-pinned prediction instead of the 'official models'
+    endpoint — yang official endpoint cuma support a curated list of models
+    dan return 404 buat sebagian besar community models."""
     if not settings.replicate_api_token:
         raise TranscribeError("REPLICATE_API_TOKEN not configured")
     if not audio_path.exists():
@@ -125,12 +129,31 @@ async def transcribe(audio_path: Path, language: str = "id") -> Transcript:
     client = replicate.Client(api_token=settings.replicate_api_token)
     lang_name = _LANGUAGE_NAMES.get(language, language)
 
-    logger.info("Uploading %s to Replicate %s", audio_path.name, settings.whisper_model)
+    # Fetch latest version (handle 'owner/model' or 'owner/model:version')
+    model_ref = settings.whisper_model
+    if ":" in model_ref:
+        model_name, version_id = model_ref.split(":", 1)
+    else:
+        model_name = model_ref
+        try:
+            model = await client.models.async_get(model_name)
+        except Exception as e:
+            raise TranscribeError(f"Model {model_name} not found on Replicate: {e}") from e
+        if not model.latest_version:
+            raise TranscribeError(f"Model {model_name} has no published version")
+        version_id = model.latest_version.id
+
+    logger.info(
+        "Uploading %s to Replicate %s (version %s)",
+        audio_path.name,
+        model_name,
+        version_id[:12],
+    )
+
     with audio_path.open("rb") as fp:
         try:
-            # incredibly-fast-whisper input format
-            output = await client.async_run(
-                settings.whisper_model,
+            prediction = await client.predictions.async_create(
+                version=version_id,
                 input={
                     "audio": fp,
                     "task": "transcribe",
@@ -139,11 +162,20 @@ async def transcribe(audio_path: Path, language: str = "id") -> Transcript:
                     "batch_size": 24,
                     "diarise_audio": False,
                 },
-                wait=60,
             )
         except Exception as e:
-            raise TranscribeError(f"Replicate Whisper failed: {e}") from e
+            raise TranscribeError(f"Replicate prediction create failed: {e}") from e
 
+    try:
+        await prediction.async_wait()
+    except Exception as e:
+        raise TranscribeError(f"Replicate prediction wait failed: {e}") from e
+
+    if prediction.status != "succeeded":
+        err = prediction.error or f"status={prediction.status}"
+        raise TranscribeError(f"Replicate prediction failed: {err}")
+
+    output = prediction.output
     if not isinstance(output, dict):
         raise TranscribeError(f"unexpected Replicate output type: {type(output).__name__}")
 
