@@ -7,6 +7,7 @@ export function Card({
 }: React.HTMLAttributes<HTMLDivElement> & { hoverable?: boolean }) {
   return (
     <div
+      style={{ boxShadow: "var(--shadow)" }}
       className={cn(
         "rounded-xl border border-[color:var(--border)] bg-[color:var(--bg-elevated)]",
         hoverable &&

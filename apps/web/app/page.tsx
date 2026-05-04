@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ApiError, api, getToken } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 const SITE_URL = "https://klipin.aldirifai.com";
 
@@ -130,6 +131,8 @@ export default function Home() {
 }
 
 function SiteHeader() {
+  const { user, loading } = useAuth();
+
   return (
     <header className="sticky top-0 z-30 border-b border-[color:var(--border)] bg-[color:var(--bg)]/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
@@ -150,12 +153,25 @@ function SiteHeader() {
             FAQ
           </a>
           <ThemeToggle className="mr-1" />
-          <Link href="/login" className="rounded px-3 py-2 text-sm text-[color:var(--text-muted)] hover:text-[color:var(--text)]">
-            Login
-          </Link>
-          <Link href="/register">
-            <Button size="sm">Coba Gratis</Button>
-          </Link>
+          {!loading && (
+            user ? (
+              <Link href="/dashboard">
+                <Button size="sm">Dashboard</Button>
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="rounded px-3 py-2 text-sm text-[color:var(--text-muted)] hover:text-[color:var(--text)]"
+                >
+                  Login
+                </Link>
+                <Link href="/register">
+                  <Button size="sm">Coba Gratis</Button>
+                </Link>
+              </>
+            )
+          )}
         </nav>
       </div>
     </header>

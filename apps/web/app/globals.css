@@ -8,36 +8,38 @@
 
 /* Light theme (default) */
 :root {
-  --bg: #ffffff;
-  --bg-elevated: #f8fafc;
-  --bg-muted: #f1f5f9;
-  --border: #e4e4e7;
-  --border-strong: #d4d4d8;
-  --text: #18181b;
-  --text-muted: #52525b;
-  --text-subtle: #71717a;
+  color-scheme: light;
+  --bg: #fafafa;             /* page bg - very subtle off-white */
+  --bg-elevated: #ffffff;     /* cards - pure white, visible elevation */
+  --bg-muted: #f4f4f5;        /* zinc-100 */
+  --border: #e4e4e7;          /* zinc-200 */
+  --border-strong: #d4d4d8;   /* zinc-300 */
+  --text: #18181b;            /* zinc-900 */
+  --text-muted: #52525b;      /* zinc-600 */
+  --text-subtle: #71717a;     /* zinc-500 */
   --accent: #d97706;          /* amber-600 */
   --accent-hover: #b45309;     /* amber-700 */
   --accent-fg: #ffffff;
-  --danger: #dc2626;
-  --success: #059669;
+  --shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.06), 0 2px 4px -2px rgb(0 0 0 / 0.04);
 }
 
 /* Dark theme */
 .dark {
+  color-scheme: dark;
   --bg: #09090b;               /* zinc-950 */
   --bg-elevated: #18181b;       /* zinc-900 */
   --bg-muted: #27272a;          /* zinc-800 */
-  --border: #27272a;
-  --border-strong: #3f3f46;
+  --border: #27272a;            /* zinc-800 */
+  --border-strong: #3f3f46;      /* zinc-700 */
   --text: #fafafa;
-  --text-muted: #a1a1aa;
-  --text-subtle: #71717a;
-  --accent: #f59e0b;            /* amber-500 */
-  --accent-hover: #fbbf24;       /* amber-400 */
+  --text-muted: #a1a1aa;        /* zinc-400 */
+  --text-subtle: #71717a;        /* zinc-500 */
+  --accent: #f59e0b;             /* amber-500 */
+  --accent-hover: #fbbf24;        /* amber-400 */
   --accent-fg: #18181b;
-  --danger: #f87171;
-  --success: #34d399;
+  --shadow: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
 }
 
 html, body {
@@ -53,7 +55,6 @@ html {
   scroll-behavior: smooth;
 }
 
-/* Subtle scroll bar */
 .scrollbar-thin::-webkit-scrollbar {
   width: 6px;
   height: 6px;
