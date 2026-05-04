@@ -16,10 +16,12 @@ dist/
 build/
 .bun/
 
-# Env
+# Env + secrets
 .env
 .env.local
 .env.*.local
+cookies.txt
+*.cookies.txt
 
 # Storage (user data — never commit)
 storage/jobs/
