@@ -31,6 +31,7 @@ class ClipOut(BaseModel):
     start_sec: float
     end_sec: float
     download_url: str | None
+    title: str | None
     caption: str | None
     hook_score: float | None
     reason: str | None
@@ -58,6 +59,7 @@ def _serialize(job: Job, clips: list[Clip] | None = None) -> JobOut:
                 start_sec=c.start_sec,
                 end_sec=c.end_sec,
                 download_url=f"/clips/{c.id}/file" if c.output_path else None,
+                title=c.title,
                 caption=c.caption,
                 hook_score=c.hook_score,
                 reason=c.reason,

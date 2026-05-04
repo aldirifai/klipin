@@ -60,6 +60,7 @@ class Clip(Base):
     start_sec: Mapped[float] = mapped_column(Float)
     end_sec: Mapped[float] = mapped_column(Float)
     output_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
     caption: Mapped[str | None] = mapped_column(Text, nullable=True)
     hook_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)

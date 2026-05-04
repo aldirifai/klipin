@@ -20,6 +20,7 @@ export interface Clip {
   start_sec: number;
   end_sec: number;
   download_url: string | null;
+  title: string | null;
   caption: string | null;
   hook_score: number | null;
   reason: string | null;
