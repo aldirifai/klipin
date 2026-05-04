@@ -19,7 +19,6 @@ dependencies = [
     "anthropic>=0.97.0",
     "replicate>=1.0.7",
     "aiofiles>=25.1.0",
-    "mediapipe>=0.10.35",
     "numpy>=2.4.4",
 ]
 

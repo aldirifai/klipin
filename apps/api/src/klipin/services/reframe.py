@@ -1,12 +1,13 @@
-"""Auto-reframe landscape clips to 9:16. Detects face center via MediaPipe,
-uses static crop based on the median face position across sampled frames.
+"""Auto-reframe landscape clips to 9:16 menggunakan OpenCV haar cascade
+buat face detection. Static crop based on median face position.
 
-For MVP we use static crop instead of dynamic crop because:
-1. Talking-head clips (podcast/vlog/interview) usually have a stationary speaker.
-2. Static crop keeps FFmpeg pipeline simple — single `crop` filter, no sendcmd.
-3. Dynamic crop is a v1.1 enhancement (smoothed crop path with sendcmd).
+Pakai OpenCV (sudah include haarcascades data) instead of MediaPipe karena:
+- Tidak ada API churn antar versi (mediapipe 0.10.x hapus mp.solutions)
+- Built-in di opencv-contrib-python yang sudah dipakai
+- Cukup akurat buat 'find face center' use case (kita gak butuh
+  landmark detail)
 
-If no face is detected, falls back to center crop.
+Dynamic crop is v1.1 enhancement.
 """
 
 from __future__ import annotations
@@ -17,7 +18,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
-import mediapipe as mp
 import numpy as np
 
 from klipin.services import ffmpeg as ff
@@ -31,9 +31,18 @@ class ReframeError(Exception):
 
 @dataclass(slots=True)
 class FaceCenter:
-    cx_norm: float  # 0..1, horizontal center of face in source frame
-    cy_norm: float  # 0..1, vertical
-    samples: int    # how many sample frames detected a face
+    cx_norm: float
+    cy_norm: float
+    samples: int
+
+
+def _get_cascade() -> cv2.CascadeClassifier:
+    """Load Haar cascade dari OpenCV's bundled data."""
+    cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    cascade = cv2.CascadeClassifier(cascade_path)
+    if cascade.empty():
+        raise ReframeError(f"failed to load haar cascade from {cascade_path}")
+    return cascade
 
 
 def _detect_face_center_sync(video_path: Path, sample_interval: float = 2.0) -> FaceCenter | None:
@@ -43,39 +52,40 @@ def _detect_face_center_sync(video_path: Path, sample_interval: float = 2.0) -> 
 
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    if total <= 0:
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    if total <= 0 or width <= 0 or height <= 0:
         cap.release()
         return None
 
+    cascade = _get_cascade()
     sample_step = max(1, int(fps * sample_interval))
     centers: list[tuple[float, float]] = []
 
-    detector = mp.solutions.face_detection.FaceDetection(
-        model_selection=1, min_detection_confidence=0.5
-    )
     try:
         for frame_idx in range(0, total, sample_step):
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             ret, frame = cap.read()
             if not ret:
                 break
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            results = detector.process(rgb)
-            if not results.detections:
-                continue
-            best = max(
-                results.detections,
-                key=lambda d: (
-                    d.location_data.relative_bounding_box.width
-                    * d.location_data.relative_bounding_box.height
-                ),
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            # Sedikit blur buat noise reduction
+            gray = cv2.equalizeHist(gray)
+            faces = cascade.detectMultiScale(
+                gray,
+                scaleFactor=1.1,
+                minNeighbors=5,
+                minSize=(60, 60),
             )
-            bb = best.location_data.relative_bounding_box
-            cx = max(0.0, min(1.0, bb.xmin + bb.width / 2))
-            cy = max(0.0, min(1.0, bb.ymin + bb.height / 2))
-            centers.append((cx, cy))
+            if len(faces) == 0:
+                continue
+            # Pick face dengan area terbesar (asumsi: presenter utama)
+            best = max(faces, key=lambda f: f[2] * f[3])
+            x, y, w, h = best
+            cx = (x + w / 2) / width
+            cy = (y + h / 2) / height
+            centers.append((max(0.0, min(1.0, cx)), max(0.0, min(1.0, cy))))
     finally:
-        detector.close()
         cap.release()
 
     if not centers:
@@ -111,8 +121,7 @@ async def reframe_to_vertical(
     target_w: int = 1080,
     target_h: int = 1920,
 ) -> Path:
-    """Reframe `source` to a vertical 9:16 clip at `target_w`x`target_h`.
-    Output is re-encoded H.264/AAC, suitable for direct upload to TikTok/Reels."""
+    """Reframe `source` to a vertical 9:16 clip at `target_w`x`target_h`."""
     if not source.exists():
         raise ReframeError(f"source missing: {source}")
 
