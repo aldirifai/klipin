@@ -79,15 +79,16 @@ async def _render_clip(
     h: highlight.Highlight,
 ) -> None:
     """Full render: cut → reframe (9:16) → burn subtitles.
-    Cut step pakai -c copy (lossless, low memory) — keyframe alignment ~1-2s
-    lebih maju OK karena reframe+subtitle yang final."""
+    Cut PAKAI re-encode (accurate seek) supaya subtitle timing match —
+    -c copy align ke keyframe yang bisa 1-2s lebih awal, bikin caption
+    desync sama audio."""
     base = f"{job_id[:8]}_{int(h.start)}_{int(h.end)}"
     raw_path = _clip_dir() / f"{base}_raw.mp4"
     reframed_path = _clip_dir() / f"{base}_v.mp4"
     final_path = _clip_dir() / f"{base}.mp4"
 
     try:
-        await ffmpeg.cut_segment(source_path, h.start, h.end, raw_path, reencode=False)
+        await ffmpeg.cut_segment(source_path, h.start, h.end, raw_path, reencode=True)
         await reframe.reframe_to_vertical(raw_path, reframed_path)
         await subtitle.burn_in_subtitles(
             reframed_path, transcript, h.start, h.end, final_path

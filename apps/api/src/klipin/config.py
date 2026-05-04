@@ -30,9 +30,10 @@ class Settings(BaseSettings):
     whisper_model: str = "vaibhavs10/incredibly-fast-whisper"
     claude_model: str = "claude-sonnet-4-6"
 
-    # Render concurrency. Tiap clip pakai 2 FFmpeg pass (reframe+subtitle).
-    # Default 2 = max 2 clips paralel, bounded RAM. Naikin kalau VPS gede.
-    max_concurrent_renders: int = 2
+    # Render concurrency. Cut+reframe+subtitle = 3 FFmpeg pass per clip,
+    # masing-masing ~300-400MB RAM saat encode HD. Default 1 = sequential
+    # (stable di VPS 4GB). Naikin ke 2-3 kalau VPS RAM 8GB+.
+    max_concurrent_renders: int = 1
 
     anthropic_api_key: str = ""
     replicate_api_token: str = ""
