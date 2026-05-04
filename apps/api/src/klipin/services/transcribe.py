@@ -79,6 +79,8 @@ async def transcribe(audio_path: Path, language: str = "id") -> Transcript:
     logger.info("Uploading %s to Replicate Whisper", audio_path.name)
     with audio_path.open("rb") as fp:
         try:
+            # wait=60 = max allowed by Replicate Prefer header. Beyond 60s,
+            # SDK auto-polls until prediction completes (no separate timeout).
             output = await client.async_run(
                 settings.whisper_model,
                 input={
@@ -88,7 +90,7 @@ async def transcribe(audio_path: Path, language: str = "id") -> Transcript:
                     "model": "large-v3",
                     "transcription": "plain text",
                 },
-                wait=600,
+                wait=60,
             )
         except Exception as e:
             raise TranscribeError(f"Replicate Whisper failed: {e}") from e
