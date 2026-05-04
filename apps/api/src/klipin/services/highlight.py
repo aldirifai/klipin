@@ -76,8 +76,8 @@ Return JSON dengan field `highlights`, list of objek dengan:
 - `end` (float, detik)
 - `hook_score` (float, 0.0–1.0)
 - `reason` (string, satu kalimat — kenapa klip ini dipilih, gaya bicara santai untuk dashboard creator)
-- `title` (string, 6–12 kata — judul VIRAL-style siap pakai sebagai overlay/description di TikTok. ALL CAPS untuk power words boleh, emoji 1 max. Format: hook + curiosity. Contoh: "Cara Gue KELUAR dari Gaji UMR (Spill Rahasia 🤫)")
-- `caption` (string, 200–350 char — caption SIAP PAKAI buat TikTok/Reels description. Format: 1-2 kalimat hook/insight + emoji 1-3 + hashtags 6-10 di akhir (mix viral umum + niche topik). Hashtag wajib relevan ke konten — JANGAN spam #fyp #foryou doang)
+- `title` (string, 6–12 kata — judul VIRAL-style siap pakai sebagai overlay/description di TikTok. ALL CAPS untuk power words boleh. **TANPA EMOJI di title** — plain text saja. Format: hook + curiosity. Contoh: "Cara Gue KELUAR dari Gaji UMR (Spill Rahasia)")
+- `caption` (string, 200–350 char — caption SIAP PAKAI buat TikTok/Reels description. Format: 1-2 kalimat hook/insight (TANPA emoji di body text) + **maksimal 1 emoji optional di akhir kalimat sebelum hashtags** + hashtags 6-10 di akhir (mix viral umum + niche topik). Hashtag wajib relevan ke konten — JANGAN spam #fyp #foryou doang)
 
 Urutkan berdasarkan `hook_score` desc.
 
@@ -107,16 +107,16 @@ Output:
       "end": 47.0,
       "hook_score": 0.92,
       "reason": "Hook personal banget — confession 'gue dulu cleaning service' langsung pull empathy. Story arc lengkap dalam 30 detik.",
-      "title": "Dari Cleaning Service Jadi 2 JUTA Views (Story Gue) 🔥",
-      "caption": "Dulu gaji 1.8 juta tiap hari nyapu mall. Sekarang? Konten gue ditonton 2 juta orang. Ini bukan luck — ini strategi. 👇\n\n#fyp #fypシ #masukberanda #ceritakerja #cuanvid #kontenkreator #motivasiindonesia #fypindonesia #moneymindset #storytime"
+      "title": "Dari Cleaning Service Jadi 2 JUTA Views (Story Gue)",
+      "caption": "Dulu gaji 1.8 juta tiap hari nyapu mall. Sekarang? Konten gue ditonton 2 juta orang. Ini bukan luck — ini strategi.\n\n#fyp #fypシ #masukberanda #ceritakerja #cuanvid #kontenkreator #motivasiindonesia #fypindonesia #moneymindset #storytime"
     },
     {
       "start": 44.8,
       "end": 80.5,
       "hook_score": 0.88,
       "reason": "Punchline kuat 'kerja yang DILIHAT orang' + cliffhanger 'gue mau spill rahasianya'. Curiosity gap tinggi.",
-      "title": "Kenapa Lo STUCK di UMR Selamanya (Spill 🤫)",
-      "caption": "Kerja keras doang ≠ jawaban. Yang bikin lo naik gaji = kerja yang DILIHAT orang. Banyak yang gak ngeh ini.\n\n#fyp #foryou #karir #moneymindset #tipskerja #personalbranding #fypindonesia #bisnisindonesia #cuan #masukberanda"
+      "title": "Kenapa Lo STUCK di UMR Selamanya (Spill Rahasia)",
+      "caption": "Kerja keras doang ≠ jawaban. Yang bikin lo naik gaji = kerja yang DILIHAT orang. Banyak yang gak ngeh ini 👇\n\n#fyp #foryou #karir #moneymindset #tipskerja #personalbranding #fypindonesia #bisnisindonesia #cuan #masukberanda"
     }
   ]
 }
