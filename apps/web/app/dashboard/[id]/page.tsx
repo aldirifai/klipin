@@ -358,6 +358,19 @@ function ClipsSection({
   );
 }
 
+function sanitizeFilename(name: string, maxLen = 80): string {
+  // Match backend _sanitize_filename — strip illegal chars + collapse spaces
+  return (
+    name
+      .replace(/[\\/:*?"<>|\x00-\x1f#]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, maxLen)
+      .trim()
+      .replace(/\.+$/, "") || "klipin-clip"
+  );
+}
+
 function ClipCard({ clip }: { clip: Clip }) {
   const [tab, setTab] = useState<"caption" | "judul">("caption");
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -488,7 +501,7 @@ function ClipCard({ clip }: { clip: Clip }) {
         {clip.download_url && (
           <a
             href={api.clipUrl(clip.download_url)}
-            download
+            download={sanitizeFilename(title) + ".mp4"}
             className={cn(
               "inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg",
               "bg-[color:var(--accent)] text-sm font-semibold text-[color:var(--accent-fg)]",

@@ -1,6 +1,7 @@
 """Job CRUD endpoints. Submission triggers BackgroundTask pipeline."""
 
 import contextlib
+import re
 from pathlib import Path
 from typing import Annotated
 
@@ -18,6 +19,21 @@ from klipin.services.pipeline import process_job
 
 MAX_UPLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB
 ALLOWED_VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
+
+# Karakter yang gak legal di filename Windows/Mac/Linux + URL-unsafe.
+# Hashtag (#) di-strip karena beberapa file picker treat sebagai fragment.
+_ILLEGAL_FILENAME_RE = re.compile(r'[\\/:*?"<>|\x00-\x1f#]')
+
+
+def _sanitize_filename(name: str, max_len: int = 80) -> str:
+    """Bersihkan title jadi filename-safe. TikTok/IG/etc. pakai filename
+    sebagai default title saat upload — jadi clean ini = auto-fill bagus."""
+    cleaned = _ILLEGAL_FILENAME_RE.sub("", name)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    cleaned = cleaned[:max_len].rstrip()
+    # Hindari nama dengan dot di akhir (illegal di Windows)
+    cleaned = cleaned.rstrip(".")
+    return cleaned
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 clips_router = APIRouter(prefix="/clips", tags=["clips"])
@@ -211,4 +227,9 @@ async def stream_clip(
     path = Path(clip.output_path)
     if not path.exists():
         raise HTTPException(status.HTTP_410_GONE, "File klip sudah tidak ada")
-    return FileResponse(path, media_type="video/mp4", filename=f"klipin-{clip.id[:8]}.mp4")
+
+    # Filename dari title (sanitized) supaya saat upload ke TikTok/IG/Reels,
+    # title field auto-fill dari nama file. User tinggal isi caption.
+    safe_title = _sanitize_filename(clip.title or "")
+    filename = f"{safe_title}.mp4" if safe_title else f"klipin-{clip.id[:8]}.mp4"
+    return FileResponse(path, media_type="video/mp4", filename=filename)
