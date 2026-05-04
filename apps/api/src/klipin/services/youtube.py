@@ -11,6 +11,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -95,14 +97,25 @@ def _ydl_opts(out_dir: Path, max_minutes: int) -> dict:
     cookies_file = os.environ.get("YOUTUBE_COOKIES_FILE")
     cookies_browser = os.environ.get("YOUTUBE_COOKIES_FROM_BROWSER")
     if cookies_file:
-        path = Path(cookies_file)
-        if path.exists():
+        src = Path(cookies_file)
+        if src.exists():
+            # yt-dlp update cookies file selama session (refresh tokens). Mount
+            # bisa read-only, jadi copy ke /tmp dulu — biar yt-dlp boleh write
+            # tanpa nyentuh source file di host.
             try:
-                size = path.stat().st_size
-                opts["cookiefile"] = cookies_file
-                logger.info("yt-dlp pakai cookies dari %s (%d bytes)", cookies_file, size)
+                size = src.stat().st_size
+                writable = Path(tempfile.gettempdir()) / "klipin_yt_cookies.txt"
+                shutil.copy2(src, writable)
+                writable.chmod(0o600)
+                opts["cookiefile"] = str(writable)
+                logger.info(
+                    "yt-dlp pakai cookies dari %s (%d bytes, copy ke %s)",
+                    cookies_file,
+                    size,
+                    writable,
+                )
             except OSError as e:
-                logger.warning("YOUTUBE_COOKIES_FILE=%s tapi gak bisa di-stat: %s", cookies_file, e)
+                logger.warning("Gagal siapin cookies dari %s: %s", cookies_file, e)
         else:
             logger.warning(
                 "YOUTUBE_COOKIES_FILE=%s tapi file gak ada di container. "
