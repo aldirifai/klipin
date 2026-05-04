@@ -8,6 +8,7 @@ Stages:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import traceback
 from pathlib import Path
@@ -26,6 +27,28 @@ def _job_dir(job_id: str) -> Path:
     path = settings.storage_dir / "jobs" / job_id
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def _cleanup_source(job_id: str, video_path: Path, audio_path: Path) -> None:
+    """Hapus file source + intermediate setelah render selesai. Clips
+    disimpan terpisah di storage/clips/, gak ke-touch. Hemat disk space."""
+    job_dir = settings.storage_dir / "jobs" / job_id
+    removed_bytes = 0
+    if job_dir.exists():
+        for p in job_dir.iterdir():
+            try:
+                size = p.stat().st_size
+                p.unlink()
+                removed_bytes += size
+            except OSError:
+                pass
+        with contextlib.suppress(OSError):
+            job_dir.rmdir()
+    logger.info(
+        "[job %s] cleanup source: %.1f MB freed",
+        job_id,
+        removed_bytes / 1024 / 1024,
+    )
 
 
 def _clip_dir() -> Path:
@@ -208,6 +231,11 @@ async def process_job(job_id: str) -> None:
 
         await asyncio.gather(*[_render_with_sem(h) for h in result.highlights])
         logger.info("[job %s] rendered %d clips", job_id, len(result.highlights))
+
+        # Cleanup source files setelah render — clips udah disimpan terpisah
+        # di storage/clips/. Source mp4 (~bisa 1GB) + audio + transcript json
+        # gak diperlukan lagi setelah render done. Bisa dikurangi storage.
+        _cleanup_source(job_id, video_path, audio_path)
 
         await _set_status(job_id, JobStatus.DONE)
         logger.info("[job %s] pipeline complete", job_id)

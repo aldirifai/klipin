@@ -1,5 +1,6 @@
 """Job CRUD endpoints. Submission triggers BackgroundTask pipeline."""
 
+import contextlib
 from pathlib import Path
 from typing import Annotated
 
@@ -158,6 +159,40 @@ async def get_job(
 
     clip_rows = await db.scalars(select(Clip).where(Clip.job_id == job.id))
     return _serialize(job, list(clip_rows.all()))
+
+
+@router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_job(
+    job_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    """Delete job + semua klip-nya (termasuk file mp4 di disk).
+    Job source udah otomatis di-cleanup setelah render done; ini hapus
+    final clips juga."""
+    job = await db.get(Job, job_id)
+    if not job or job.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job tidak ditemukan")
+
+    # Hapus file mp4 dari disk
+    clip_rows = await db.scalars(select(Clip).where(Clip.job_id == job.id))
+    for c in clip_rows.all():
+        if c.output_path:
+            with contextlib.suppress(OSError):
+                Path(c.output_path).unlink(missing_ok=True)
+
+    # Hapus job dir kalau masih ada (job yang failed sebelum cleanup)
+    job_dir = settings.storage_dir / "jobs" / job.id
+    if job_dir.exists():
+        for p in job_dir.iterdir():
+            with contextlib.suppress(OSError):
+                p.unlink()
+        with contextlib.suppress(OSError):
+            job_dir.rmdir()
+
+    # Cascade delete clips via SQLAlchemy
+    await db.delete(job)
+    await db.commit()
 
 
 @clips_router.get("/{clip_id}/file")

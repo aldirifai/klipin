@@ -158,6 +158,7 @@ export const api = {
   },
   listJobs: () => request<Job[]>("/jobs"),
   getJob: (id: string) => request<Job>(`/jobs/${id}`),
+  deleteJob: (id: string) => request<void>(`/jobs/${id}`, { method: "DELETE" }),
   clipUrl: (path: string) => {
     // Append ?token=<jwt> supaya <video src> / <a download> bisa auth
     // (browser gak kirim Authorization header buat media tags).

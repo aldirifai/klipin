@@ -5,25 +5,50 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/cn";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { ApiError, api, setToken } from "@/lib/api";
 
 export default function RegisterPage() {
   return (
-    <Suspense fallback={<RegisterShell />}>
+    <Suspense fallback={<AuthShell><FormSkeleton /></AuthShell>}>
       <RegisterForm />
     </Suspense>
   );
 }
 
-function RegisterShell({ children }: { children?: React.ReactNode }) {
+function AuthShell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="flex flex-1 items-center justify-center px-6 py-16">
-      <div className="w-full max-w-md rounded-2xl border border-white/5 bg-zinc-900/60 p-6 backdrop-blur sm:p-8">
-        {children ?? <p className="text-sm text-zinc-500">Loading...</p>}
+    <>
+      <header className="border-b border-[color:var(--border)]">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[color:var(--accent)] text-sm font-black text-[color:var(--accent-fg)]">
+              K
+            </div>
+            <span className="font-display font-bold tracking-tight">Klipin</span>
+          </Link>
+          <ThemeToggle />
+        </div>
+      </header>
+      <main className="flex flex-1 items-center justify-center px-4 py-12 sm:py-16">
+        <div className="w-full max-w-md">{children}</div>
+      </main>
+    </>
+  );
+}
+
+function FormSkeleton() {
+  return (
+    <Card className="p-6 sm:p-8">
+      <div className="space-y-4">
+        <div className="h-7 w-1/2 animate-pulse rounded bg-[color:var(--bg-muted)]" />
+        <div className="h-4 w-2/3 animate-pulse rounded bg-[color:var(--bg-muted)]" />
+        <div className="h-10 animate-pulse rounded bg-[color:var(--bg-muted)]" />
+        <div className="h-10 animate-pulse rounded bg-[color:var(--bg-muted)]" />
       </div>
-    </main>
+    </Card>
   );
 }
 
@@ -56,11 +81,7 @@ function RegisterForm() {
       const { access_token } = await api.register(email.trim(), password);
       setToken(access_token);
 
-      // Determine destination: ?next= param wins, else /dashboard.
       const next = search.get("next") || "/dashboard";
-
-      // If we have a pending URL stored from the landing page, kick off the
-      // job before redirecting so the user lands on their new job page.
       const pending =
         typeof window !== "undefined"
           ? sessionStorage.getItem("klipin_pending_url")
@@ -74,8 +95,6 @@ function RegisterForm() {
           router.push(`/dashboard/${job.id}`);
           return;
         } catch (err) {
-          // Account is created already; surface the job-creation issue but
-          // still route the user into the app.
           const msg =
             err instanceof ApiError
               ? err.detail || err.message
@@ -93,8 +112,6 @@ function RegisterForm() {
         err instanceof ApiError
           ? err.detail || err.message
           : "Daftar gagal";
-      // Most server errors here are duplicate-email; show on the email field
-      // for clarity, with a toast for visibility.
       setEmailError(msg);
       toast.error(msg);
       setLoading(false);
@@ -102,22 +119,24 @@ function RegisterForm() {
   }
 
   return (
-    <RegisterShell>
-      <form onSubmit={handleSubmit} noValidate>
-        <h1 className="font-display mb-1 text-2xl font-bold tracking-tight">
-          Daftar Klipin
-        </h1>
-        <p className="mb-6 text-sm text-zinc-400">
-          Sudah punya akun?{" "}
-          <Link
-            href="/login"
-            className="font-medium text-amber-400 transition-colors hover:text-amber-300"
-          >
-            Login di sini
-          </Link>
-        </p>
+    <AuthShell>
+      <Card className="p-6 sm:p-8">
+        <div className="mb-6">
+          <h1 className="font-display mb-1 text-2xl font-bold tracking-tight">
+            Daftar
+          </h1>
+          <p className="text-sm text-[color:var(--text-muted)]">
+            Sudah punya akun?{" "}
+            <Link
+              href="/login"
+              className="font-medium text-[color:var(--accent)] hover:underline underline-offset-2"
+            >
+              Login di sini
+            </Link>
+          </p>
+        </div>
 
-        <div className="space-y-4">
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <Input
             id="email"
             label="Email"
@@ -149,50 +168,38 @@ function RegisterForm() {
                   if (passwordError) setPasswordError(null);
                 }}
                 error={passwordError ?? undefined}
-                className="pr-12"
+                className="pr-11"
                 placeholder="Minimal 8 karakter"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
-                aria-label={
-                  showPassword ? "Sembunyikan password" : "Tampilkan password"
-                }
+                aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
                 aria-pressed={showPassword}
-                className={cn(
-                  "absolute right-2 top-[34px] flex h-9 w-9 items-center justify-center rounded-lg text-zinc-400 transition-colors",
-                  "hover:bg-white/5 hover:text-zinc-100 active:scale-[0.95]",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60",
-                )}
+                className="absolute right-2 top-[30px] flex h-9 w-9 items-center justify-center rounded-md text-[color:var(--text-muted)] transition-colors hover:text-[color:var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)]"
               >
                 {showPassword ? <EyeOffIcon /> : <EyeIcon />}
               </button>
             </div>
             {!passwordError && (
-              <p className="mt-1.5 text-xs text-zinc-500">
-                Gunakan minimal 8 karakter. Campur huruf & angka biar makin
-                aman.
+              <p className="mt-1.5 text-xs text-[color:var(--text-subtle)]">
+                Minimal 8 karakter. Campur huruf & angka biar lebih aman.
               </p>
             )}
           </div>
-        </div>
 
-        <Button
-          type="submit"
-          variant="primary"
-          size="lg"
-          fullWidth
-          loading={loading}
-          className="mt-6"
-        >
-          {loading ? "Mendaftar" : "Daftar"}
-        </Button>
+          <Button type="submit" size="lg" fullWidth loading={loading}>
+            {loading ? "Mendaftar…" : "Daftar Gratis"}
+          </Button>
+        </form>
+      </Card>
 
-        <p className="mt-4 text-center text-xs text-zinc-500">
-          Dengan mendaftar, kamu setuju memakai Klipin secara wajar.
-        </p>
-      </form>
-    </RegisterShell>
+      <p className="mt-6 text-center text-xs text-[color:var(--text-subtle)]">
+        Dengan daftar, kamu setuju dengan{" "}
+        <span className="hover:text-[color:var(--text-muted)]">Terms</span> &{" "}
+        <span className="hover:text-[color:var(--text-muted)]">Privacy</span>.
+      </p>
+    </AuthShell>
   );
 }
 
