@@ -45,7 +45,15 @@ def _get_cascade() -> cv2.CascadeClassifier:
     return cascade
 
 
-def _detect_face_center_sync(video_path: Path, sample_interval: float = 2.0) -> FaceCenter | None:
+def _detect_face_center_sync(
+    video_path: Path,
+    sample_interval: float = 2.0,
+    start_sec: float = 0.0,
+    end_sec: float | None = None,
+) -> FaceCenter | None:
+    """Detect face center, optionally within [start_sec, end_sec] window.
+    Pakai window saat ngitung face center per-clip dari source (bukan
+    file cut yang sudah re-encode), hemat 1 ffmpeg pass."""
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         return None
@@ -58,12 +66,18 @@ def _detect_face_center_sync(video_path: Path, sample_interval: float = 2.0) -> 
         cap.release()
         return None
 
+    start_frame = max(0, int(start_sec * fps))
+    end_frame = total if end_sec is None else min(total, int(end_sec * fps))
+    if end_frame <= start_frame:
+        cap.release()
+        return None
+
     cascade = _get_cascade()
     sample_step = max(1, int(fps * sample_interval))
     centers: list[tuple[float, float]] = []
 
     try:
-        for frame_idx in range(0, total, sample_step):
+        for frame_idx in range(start_frame, end_frame, sample_step):
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             ret, frame = cap.read()
             if not ret:
@@ -97,9 +111,51 @@ def _detect_face_center_sync(video_path: Path, sample_interval: float = 2.0) -> 
 
 
 async def detect_face_center(
-    video_path: Path, sample_interval: float = 2.0
+    video_path: Path,
+    sample_interval: float = 2.0,
+    start_sec: float = 0.0,
+    end_sec: float | None = None,
 ) -> FaceCenter | None:
-    return await asyncio.to_thread(_detect_face_center_sync, video_path, sample_interval)
+    return await asyncio.to_thread(
+        _detect_face_center_sync, video_path, sample_interval, start_sec, end_sec
+    )
+
+
+def compute_crop(
+    src_w: int,
+    src_h: int,
+    target_w: int,
+    target_h: int,
+    face: FaceCenter | None,
+) -> tuple[int, int, int, int]:
+    """Compute crop coords (w, h, x, y) untuk dapet 9:16 dari source."""
+    target_aspect = target_w / target_h
+    src_aspect = src_w / src_h
+
+    if src_aspect > target_aspect:
+        crop_w = int(round(src_h * target_aspect))
+        crop_h = src_h
+        crop_w -= crop_w % 2
+        if face:
+            cx_px = int(face.cx_norm * src_w)
+            x = max(0, min(src_w - crop_w, cx_px - crop_w // 2))
+        else:
+            x = (src_w - crop_w) // 2
+        y = 0
+    elif src_aspect < target_aspect:
+        crop_w = src_w
+        crop_h = int(round(src_w / target_aspect))
+        crop_h -= crop_h % 2
+        x = 0
+        if face:
+            cy_px = int(face.cy_norm * src_h)
+            y = max(0, min(src_h - crop_h, cy_px - crop_h // 2))
+        else:
+            y = (src_h - crop_h) // 2
+    else:
+        crop_w, crop_h, x, y = src_w, src_h, 0, 0
+
+    return crop_w, crop_h, x, y
 
 
 def _probe_dims_sync(video_path: Path) -> tuple[int, int]:

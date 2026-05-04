@@ -8,7 +8,6 @@ Stages:
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 import traceback
 from pathlib import Path
@@ -18,7 +17,7 @@ from sqlalchemy import select
 from klipin.config import settings
 from klipin.db import SessionLocal
 from klipin.models import Clip, Job, JobStatus
-from klipin.services import ffmpeg, highlight, reframe, subtitle, transcribe, youtube
+from klipin.services import ffmpeg, highlight, reframe, render, subtitle, transcribe, youtube
 
 logger = logging.getLogger(__name__)
 
@@ -80,25 +79,18 @@ async def _render_clip(
     transcript: transcribe.Transcript,
     h: highlight.Highlight,
 ) -> None:
-    """Full render: cut → reframe (9:16) → burn subtitles.
-    Cut PAKAI re-encode (accurate seek) supaya subtitle timing match —
-    -c copy align ke keyframe yang bisa 1-2s lebih awal, bikin caption
-    desync sama audio."""
+    """One-shot render: cut + reframe + subtitle dalam 1 FFmpeg pass.
+    ~3x lebih cepat dari approach 3-pass. Detail di services/render.py."""
     base = f"{job_id[:8]}_{int(h.start)}_{int(h.end)}"
-    raw_path = _clip_dir() / f"{base}_raw.mp4"
-    reframed_path = _clip_dir() / f"{base}_v.mp4"
     final_path = _clip_dir() / f"{base}.mp4"
 
-    try:
-        await ffmpeg.cut_segment(source_path, h.start, h.end, raw_path, reencode=True)
-        await reframe.reframe_to_vertical(raw_path, reframed_path)
-        await subtitle.burn_in_subtitles(
-            reframed_path, transcript, h.start, h.end, final_path
-        )
-    finally:
-        for p in (raw_path, reframed_path):
-            with contextlib.suppress(OSError):
-                p.unlink(missing_ok=True)
+    await render.render_clip_oneshot(
+        source=source_path,
+        output=final_path,
+        transcript=transcript,
+        start_sec=h.start,
+        end_sec=h.end,
+    )
 
     await _persist_clip(
         job_id,
@@ -230,6 +222,7 @@ async def process_job(job_id: str) -> None:
         ffmpeg.FFmpegError,
         reframe.ReframeError,
         subtitle.SubtitleError,
+        render.RenderError,
     ) as e:
         logger.error("[job %s] pipeline error: %s", job_id, e)
         await _set_status(job_id, JobStatus.FAILED, error=str(e))
