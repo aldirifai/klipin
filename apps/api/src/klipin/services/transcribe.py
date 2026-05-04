@@ -5,6 +5,7 @@ Output format: chunks dengan [start, end] timestamp pairs."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -150,36 +151,57 @@ async def transcribe(audio_path: Path, language: str = "id") -> Transcript:
         version_id[:12],
     )
 
-    with audio_path.open("rb") as fp:
+    # Retry logic untuk transient errors (CUDA OOM, GPU contention, dll).
+    # Replicate shared GPU sering kena race-condition w/ other tenants.
+    last_error: str | None = None
+    for attempt in range(3):
+        if attempt > 0:
+            backoff = 5 * (2**attempt)  # 10s, 20s
+            logger.warning("Retry %d after %ds (last: %s)", attempt, backoff, last_error)
+            await asyncio.sleep(backoff)
+
+        with audio_path.open("rb") as fp:
+            try:
+                prediction = await client.predictions.async_create(
+                    version=version_id,
+                    input={
+                        "audio": fp,
+                        "task": "transcribe",
+                        "language": lang_name,
+                        "timestamp": "word",
+                        "batch_size": 8,  # konservatif buat hindari CUDA OOM
+                        "diarise_audio": False,
+                    },
+                )
+            except Exception as e:
+                last_error = f"create failed: {e}"
+                continue
+
         try:
-            prediction = await client.predictions.async_create(
-                version=version_id,
-                input={
-                    "audio": fp,
-                    "task": "transcribe",
-                    "language": lang_name,
-                    "timestamp": "word",
-                    "batch_size": 24,
-                    "diarise_audio": False,
-                },
-            )
+            await prediction.async_wait()
         except Exception as e:
-            raise TranscribeError(f"Replicate prediction create failed: {e}") from e
+            last_error = f"wait failed: {e}"
+            continue
 
-    try:
-        await prediction.async_wait()
-    except Exception as e:
-        raise TranscribeError(f"Replicate prediction wait failed: {e}") from e
+        if prediction.status == "succeeded":
+            output = prediction.output
+            if not isinstance(output, dict):
+                raise TranscribeError(
+                    f"unexpected Replicate output type: {type(output).__name__}"
+                )
+            return _parse_replicate_output(output)
 
-    if prediction.status != "succeeded":
+        # Cek transient errors yang worth retry
         err = prediction.error or f"status={prediction.status}"
-        raise TranscribeError(f"Replicate prediction failed: {err}")
+        is_transient = any(
+            keyword in str(err).lower()
+            for keyword in ("cuda", "out of memory", "oom", "timeout", "rate")
+        )
+        last_error = str(err)
+        if not is_transient:
+            raise TranscribeError(f"Replicate prediction failed: {err}")
 
-    output = prediction.output
-    if not isinstance(output, dict):
-        raise TranscribeError(f"unexpected Replicate output type: {type(output).__name__}")
-
-    return _parse_replicate_output(output)
+    raise TranscribeError(f"Replicate prediction failed after 3 retries: {last_error}")
 
 
 def save_transcript(transcript: Transcript, path: Path) -> None:
