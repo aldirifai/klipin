@@ -1,9 +1,16 @@
-"""YouTube ingest via yt-dlp. Async wrapper over the blocking download call."""
+"""YouTube ingest via yt-dlp. Async wrapper over the blocking download call.
+
+Catatan deploy: kalau VPS dari datacenter (Hetzner/DO/AWS/etc), YouTube
+sering blokir download dengan error "Sign in to confirm you're not a bot".
+Workaround: kasih cookies file via env COOKIES_FROM_BROWSER atau
+COOKIES_FILE (path absolut ke cookies.txt yang di-export dari browser).
+"""
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,14 +36,33 @@ class DownloadResult:
     title: str
 
 
+class _YDLLogger:
+    """Pipe yt-dlp logs ke Python logging supaya error visible di docker logs."""
+
+    def debug(self, msg: str) -> None:
+        if msg.startswith("[debug]"):
+            logger.debug(msg)
+        else:
+            self.info(msg)
+
+    def info(self, msg: str) -> None:
+        logger.info("yt-dlp: %s", msg)
+
+    def warning(self, msg: str) -> None:
+        logger.warning("yt-dlp: %s", msg)
+
+    def error(self, msg: str) -> None:
+        logger.error("yt-dlp: %s", msg)
+
+
 def _ydl_opts(out_dir: Path, max_minutes: int) -> dict:
-    return {
-        "format": "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+    opts: dict = {
+        # Lebih permissive: pakai any video+audio format, tapi tetep cap 1080p.
+        "format": "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
         "outtmpl": str(out_dir / "source.%(ext)s"),
         "merge_output_format": "mp4",
         "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
+        "logger": _YDLLogger(),
         "match_filter": _build_duration_filter(max_minutes),
         "postprocessors": [
             {
@@ -47,7 +73,25 @@ def _ydl_opts(out_dir: Path, max_minutes: int) -> dict:
             }
         ],
         "keepvideo": True,
+        "retries": 5,
+        "fragment_retries": 5,
+        "concurrent_fragment_downloads": 4,
+        "extractor_args": {
+            # Coba beberapa player client; kalau yang default kena bot-check,
+            # ada fallback. android client sering work tanpa cookies.
+            "youtube": {"player_client": ["android", "web", "ios"]},
+        },
     }
+
+    # Optional: cookies dari env (untuk bypass bot detection di datacenter IP)
+    cookies_file = os.environ.get("YOUTUBE_COOKIES_FILE")
+    cookies_browser = os.environ.get("YOUTUBE_COOKIES_FROM_BROWSER")
+    if cookies_file and Path(cookies_file).exists():
+        opts["cookiefile"] = cookies_file
+    elif cookies_browser:
+        opts["cookiesfrombrowser"] = (cookies_browser,)
+
+    return opts
 
 
 def _build_duration_filter(max_minutes: int):
@@ -62,6 +106,25 @@ def _build_duration_filter(max_minutes: int):
     return _filter
 
 
+_VIDEO_EXTS = {".mp4", ".mkv", ".webm", ".mov", ".m4v"}
+
+
+def _find_video_file(out_dir: Path) -> Path | None:
+    """Cari file video di out_dir. Coba `source.mp4` (merged) dulu,
+    kalau gak ada, ambil file video apa pun yang awalannya `source.`
+    (misal `source.f399.mp4` kalau merge gagal)."""
+    final = out_dir / "source.mp4"
+    if final.exists() and final.stat().st_size > 0:
+        return final
+
+    candidates = sorted(
+        (p for p in out_dir.glob("source.*") if p.suffix.lower() in _VIDEO_EXTS),
+        key=lambda p: p.stat().st_size,
+        reverse=True,
+    )
+    return candidates[0] if candidates else None
+
+
 def _download_sync(url: str, out_dir: Path, max_minutes: int) -> DownloadResult:
     out_dir.mkdir(parents=True, exist_ok=True)
     opts = _ydl_opts(out_dir, max_minutes)
@@ -73,23 +136,30 @@ def _download_sync(url: str, out_dir: Path, max_minutes: int) -> DownloadResult:
         msg = str(e)
         if "video too long" in msg:
             raise TooLongError(msg) from e
-        raise YoutubeError(msg) from e
+        raise YoutubeError(f"yt-dlp download error: {msg}") from e
 
     if info is None:
-        raise YoutubeError("yt-dlp returned no info")
+        raise YoutubeError("yt-dlp returned no info (extract_info returned None)")
 
-    video_path = out_dir / "source.mp4"
+    video_path = _find_video_file(out_dir)
     audio_path = out_dir / "source.mp3"
 
-    if not video_path.exists():
-        candidates = list(out_dir.glob("source.*"))
-        video_candidates = [p for p in candidates if p.suffix in {".mp4", ".mkv", ".webm"}]
-        if not video_candidates:
-            raise YoutubeError(f"video file not found in {out_dir}")
-        video_path = video_candidates[0]
+    if video_path is None:
+        # List apa yang ada biar gampang debug
+        existing = sorted(p.name for p in out_dir.iterdir())
+        raise YoutubeError(
+            f"video file tidak ditemukan setelah yt-dlp selesai. "
+            f"Files di {out_dir.name}/: {existing or '(kosong)'}. "
+            f"Cek docker compose logs api untuk error yt-dlp."
+        )
 
     if not audio_path.exists():
-        raise YoutubeError(f"audio extraction failed in {out_dir}")
+        # Audio belum ke-extract — fallback ke extract manual via ffmpeg
+        logger.warning("audio extract postprocessor gagal, audio file gak ada di %s", out_dir)
+        existing = sorted(p.name for p in out_dir.iterdir())
+        raise YoutubeError(
+            f"audio extraction gagal. Files di {out_dir.name}/: {existing}"
+        )
 
     return DownloadResult(
         video_path=video_path,
