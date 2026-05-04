@@ -1,7 +1,10 @@
 // Klipin API client — typed wrapper around fetch with auth + error handling.
+//
+// API_URL behavior:
+// - Set NEXT_PUBLIC_API_URL = "http://127.0.0.1:8787" for local dev (different ports)
+// - Leave UNSET in production behind reverse proxy → relative URLs hit same origin
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8787";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export type JobStatus =
   | "queued"

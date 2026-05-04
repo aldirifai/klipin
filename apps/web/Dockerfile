@@ -9,9 +9,10 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# NEXT_PUBLIC_* di-inline ke client bundle saat build, bukan runtime.
-# compose.yml passes via build.args; default ke localhost untuk dev build.
-ARG NEXT_PUBLIC_API_URL=http://127.0.0.1:8787
+# NEXT_PUBLIC_* inline ke bundle saat build. Default kosong supaya frontend
+# pakai relative URL (cocok untuk deploy di belakang nginx reverse proxy yang
+# route /auth, /jobs, /clips, /payments ke API container).
+ARG NEXT_PUBLIC_API_URL=
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN bun run build
