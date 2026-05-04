@@ -93,6 +93,24 @@ Rebuild web container biar `NEXT_PUBLIC_API_URL` ke-bake ke bundle:
 docker compose up -d --build web
 ```
 
+## Bikin superadmin / user lifetime
+
+Buat user dengan plan lifetime (bypass payment) — biasanya dipakai untuk akun
+admin pribadi atau awarding ke tester:
+
+```bash
+# Interaktif (prompt password)
+docker compose exec api python -m klipin.scripts.create_user \
+    admin@klipin.aldirifai.com --lifetime
+
+# Non-interaktif (kalau pakai password di-env, jangan masuk shell history)
+docker compose exec -e KLIPIN_NEW_PASSWORD=secret-super-password api \
+    python -m klipin.scripts.create_user admin@klipin.aldirifai.com --lifetime
+```
+
+Idempotent — kalau user-nya udah ada, cuma upgrade ke lifetime tanpa ganti
+password. Untuk reset password tambah `--reset-password`.
+
 ## Update setelah deploy
 
 ```bash
