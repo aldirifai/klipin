@@ -1,8 +1,19 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from klipin.config import settings
 from klipin.routers import auth, health, jobs, payments
+
+# Force INFO logging untuk semua module klipin.* (uvicorn default cuma WARNING
+# untuk app loggers, jadi info tentang cookies/pipeline progress kena filter).
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    force=True,
+)
+logging.getLogger("klipin").setLevel(logging.INFO)
 
 app = FastAPI(title="Klipin API", version="0.1.0")
 
