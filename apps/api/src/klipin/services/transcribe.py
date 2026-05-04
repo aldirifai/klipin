@@ -1,4 +1,7 @@
-"""Whisper Large-v3 transcription via Replicate. Returns word-level timestamps."""
+"""Whisper transcription via Replicate. Returns word-level timestamps.
+
+Default model: vaibhavs10/incredibly-fast-whisper (paling stable + cepat).
+Output format: chunks dengan [start, end] timestamp pairs."""
 
 from __future__ import annotations
 
@@ -32,50 +35,84 @@ class Transcript:
     words: list[WordSpan]
 
 
-def _parse_replicate_output(payload: dict) -> Transcript:
-    """Parse output dari WhisperX (atau Whisper variant) di Replicate.
+# incredibly-fast-whisper accepts language in full English name
+_LANGUAGE_NAMES = {
+    "id": "indonesian",
+    "en": "english",
+    "es": "spanish",
+    "fr": "french",
+    "ja": "japanese",
+    "ko": "korean",
+    "zh": "chinese",
+}
 
-    Format umum:
+
+def _parse_replicate_output(payload: dict) -> Transcript:
+    """Parse output dari incredibly-fast-whisper (atau Whisper variant).
+
+    Format incredibly-fast-whisper:
         {
-            "segments": [
-                {"start": 0.0, "end": 2.5, "text": "...",
-                 "words": [{"word": "...", "start": 0.0, "end": 0.5,
-                            "score": 0.9}, ...]},
+            "text": "full text",
+            "chunks": [
+                {"timestamp": [0.0, 1.5], "text": "word"},
                 ...
-            ],
-            "detected_language": "id" / "indonesian"
+            ]
         }
 
-    WhisperX kadang return word object dengan key 'word', 'start', 'end'.
-    Beberapa model lain pake 'text' instead of 'word'.
+    Format whisperx (alternate):
+        {
+            "segments": [{"words": [{"word", "start", "end"}, ...]}, ...],
+            "detected_language": "id"
+        }
+
+    Parser handle keduanya.
     """
-    segments = payload.get("segments") or []
     words: list[WordSpan] = []
-    for seg in segments:
-        for w in seg.get("words", []) or []:
-            try:
-                word_text = str(w.get("word") or w.get("text") or "").strip()
-                if not word_text:
-                    continue
-                words.append(
-                    WordSpan(
-                        word=word_text,
-                        start=float(w.get("start", 0.0)),
-                        end=float(w.get("end", 0.0)),
+
+    # incredibly-fast-whisper: chunks dengan timestamp tuple
+    chunks = payload.get("chunks") or []
+    for chunk in chunks:
+        ts = chunk.get("timestamp")
+        text = str(chunk.get("text", "")).strip()
+        if not text or not ts or len(ts) != 2:
+            continue
+        try:
+            start = float(ts[0])
+            end = float(ts[1] if ts[1] is not None else ts[0])
+            words.append(WordSpan(word=text, start=start, end=end))
+        except (TypeError, ValueError):
+            continue
+
+    # WhisperX-style: segments[].words[]
+    if not words:
+        segments = payload.get("segments") or []
+        for seg in segments:
+            for w in seg.get("words", []) or []:
+                try:
+                    word_text = str(w.get("word") or w.get("text") or "").strip()
+                    if not word_text:
+                        continue
+                    words.append(
+                        WordSpan(
+                            word=word_text,
+                            start=float(w.get("start", 0.0)),
+                            end=float(w.get("end", 0.0)),
+                        )
                     )
-                )
-            except (TypeError, ValueError):
-                continue
+                except (TypeError, ValueError):
+                    continue
 
-    text = str(payload.get("transcription") or payload.get("text") or "").strip()
-    if not text and segments:
-        text = " ".join(str(s.get("text", "")).strip() for s in segments).strip()
-
-    return Transcript(
-        text=text,
-        language=str(payload.get("detected_language") or "id"),
-        words=words,
+    text = (
+        str(payload.get("text") or payload.get("transcription") or "").strip()
     )
+    if not text and words:
+        text = " ".join(w.word for w in words)
+
+    language = str(
+        payload.get("language") or payload.get("detected_language") or "id"
+    )
+
+    return Transcript(text=text, language=language, words=words)
 
 
 async def transcribe(audio_path: Path, language: str = "id") -> Transcript:
@@ -86,20 +123,21 @@ async def transcribe(audio_path: Path, language: str = "id") -> Transcript:
         raise TranscribeError(f"audio file missing: {audio_path}")
 
     client = replicate.Client(api_token=settings.replicate_api_token)
+    lang_name = _LANGUAGE_NAMES.get(language, language)
 
     logger.info("Uploading %s to Replicate %s", audio_path.name, settings.whisper_model)
     with audio_path.open("rb") as fp:
         try:
-            # WhisperX input keys: audio_file (file/URL), language, align_output
-            # untuk word-level timestamps.
+            # incredibly-fast-whisper input format
             output = await client.async_run(
                 settings.whisper_model,
                 input={
-                    "audio_file": fp,
-                    "language": language,
-                    "align_output": True,
-                    "batch_size": 16,
-                    "diarization": False,
+                    "audio": fp,
+                    "task": "transcribe",
+                    "language": lang_name,
+                    "timestamp": "word",
+                    "batch_size": 24,
+                    "diarise_audio": False,
                 },
                 wait=60,
             )
