@@ -15,6 +15,7 @@ dependencies = [
     "argon2-cffi>=23.1",
     "python-multipart>=0.0.20",
     "yt-dlp>=2026.3.17",
+    "bgutil-ytdlp-pot-provider>=1.2",
     "anthropic>=0.97.0",
     "replicate>=1.0.7",
     "aiofiles>=25.1.0",

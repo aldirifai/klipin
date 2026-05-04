@@ -87,17 +87,10 @@ def _ydl_opts(out_dir: Path, max_minutes: int) -> dict:
         "fragment_retries": 5,
         "concurrent_fragment_downloads": 4,
         "extractor_args": {
-            # Per Q4 2025, android & ios clients butuh GVS PO token (YouTube
-            # anti-bot baru). tv_simply + tv_embedded + mweb masih bypass-able
-            # tanpa token. Urutan: yang paling reliable dulu.
-            "youtube": {
-                "player_client": [
-                    "tv_simply",
-                    "tv_embedded",
-                    "mweb",
-                    "web",
-                ],
-            },
+            # bgutil-ytdlp-pot-provider plugin auto-generate PO Token,
+            # jadi web client (formats paling lengkap) bisa kepake.
+            # Fallback ke tv_simply + mweb kalau web kena.
+            "youtube": {"player_client": ["web", "tv_simply", "mweb"]},
         },
     }
 
