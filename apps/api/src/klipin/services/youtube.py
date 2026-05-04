@@ -73,6 +73,9 @@ def _ydl_opts(out_dir: Path, max_minutes: int, cookies_override: Path | None = N
         "merge_output_format": "mp4",
         "noplaylist": True,
         "logger": _YDLLogger(),
+        # Verbose: nampilin plugin discovery + per-request decisions di log,
+        # diagnostic buat verifikasi PO Token plugin trigger atau gak.
+        "verbose": True,
         "match_filter": _build_duration_filter(max_minutes),
         "postprocessors": [
             {
