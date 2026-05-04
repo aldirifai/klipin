@@ -94,10 +94,26 @@ def _ydl_opts(out_dir: Path, max_minutes: int) -> dict:
     # Optional: cookies dari env (untuk bypass bot detection di datacenter IP)
     cookies_file = os.environ.get("YOUTUBE_COOKIES_FILE")
     cookies_browser = os.environ.get("YOUTUBE_COOKIES_FROM_BROWSER")
-    if cookies_file and Path(cookies_file).exists():
-        opts["cookiefile"] = cookies_file
+    if cookies_file:
+        path = Path(cookies_file)
+        if path.exists():
+            try:
+                size = path.stat().st_size
+                opts["cookiefile"] = cookies_file
+                logger.info("yt-dlp pakai cookies dari %s (%d bytes)", cookies_file, size)
+            except OSError as e:
+                logger.warning("YOUTUBE_COOKIES_FILE=%s tapi gak bisa di-stat: %s", cookies_file, e)
+        else:
+            logger.warning(
+                "YOUTUBE_COOKIES_FILE=%s tapi file gak ada di container. "
+                "Cek mount di docker-compose.yml.",
+                cookies_file,
+            )
     elif cookies_browser:
         opts["cookiesfrombrowser"] = (cookies_browser,)
+        logger.info("yt-dlp pakai cookies dari browser: %s", cookies_browser)
+    else:
+        logger.info("yt-dlp run tanpa cookies (YOUTUBE_COOKIES_FILE not set)")
 
     return opts
 
