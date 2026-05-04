@@ -3,16 +3,20 @@
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, HttpUrl
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from klipin.config import settings
 from klipin.db import get_session
 from klipin.models import Clip, Job, User
 from klipin.routers.auth import current_user
 from klipin.services.pipeline import process_job
+
+MAX_UPLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB
+ALLOWED_VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 clips_router = APIRouter(prefix="/clips", tags=["clips"])
@@ -72,6 +76,56 @@ async def create_job(
 ) -> JobOut:
     job = Job(user_id=user.id, youtube_url=str(payload.youtube_url))
     db.add(job)
+    await db.commit()
+    await db.refresh(job)
+
+    background.add_task(process_job, job.id)
+    return _serialize(job)
+
+
+@router.post("/upload", response_model=JobOut, status_code=status.HTTP_201_CREATED)
+async def upload_job(
+    background: BackgroundTasks,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[AsyncSession, Depends(get_session)],
+    file: Annotated[UploadFile, File(description="Video file (mp4/mov/mkv/webm)")],
+) -> JobOut:
+    """Upload video langsung tanpa lewat YouTube. Pipeline (transcribe →
+    highlight → cut → reframe → subtitle) sama persis."""
+    if not file.filename:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "File harus punya nama")
+    ext = Path(file.filename).suffix.lower()
+    if ext not in ALLOWED_VIDEO_EXTS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Format gak didukung. Pakai salah satu: {sorted(ALLOWED_VIDEO_EXTS)}",
+        )
+
+    job = Job(user_id=user.id, youtube_url=f"upload://{file.filename}")
+    db.add(job)
+    await db.commit()
+    await db.refresh(job)
+
+    job_dir = settings.storage_dir / "jobs" / job.id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    source_path = job_dir / "source.mp4"
+
+    # Stream file ke disk, cap di 1GB
+    written = 0
+    with source_path.open("wb") as out:
+        while chunk := await file.read(1024 * 1024):
+            written += len(chunk)
+            if written > MAX_UPLOAD_BYTES:
+                source_path.unlink(missing_ok=True)
+                await db.delete(job)
+                await db.commit()
+                raise HTTPException(
+                    status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    "File terlalu besar (max 1 GB)",
+                )
+            out.write(chunk)
+
+    job.source_path = str(source_path)
     await db.commit()
     await db.refresh(job)
 

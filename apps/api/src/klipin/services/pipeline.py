@@ -107,7 +107,12 @@ async def _render_clip(
 
 
 async def process_job(job_id: str) -> None:
-    """Pipeline orchestrator. Updates job.status across stages."""
+    """Pipeline orchestrator. Updates job.status across stages.
+
+    Job sourcing:
+    - Kalau `youtube_url` ada → download via yt-dlp (Stage 1)
+    - Kalau `source_path` udah ada (dari upload) → skip download, extract audio
+    """
     logger.info("[job %s] starting pipeline", job_id)
 
     try:
@@ -117,30 +122,58 @@ async def process_job(job_id: str) -> None:
                 logger.error("[job %s] not found in DB", job_id)
                 return
             youtube_url = job.youtube_url
+            existing_source = job.source_path
+            user_id = job.user_id
 
         out_dir = _job_dir(job_id)
 
-        # Stage 1: download (pakai cookies user kalau ada)
-        await _set_status(job_id, JobStatus.DOWNLOADING)
-        user_cookies = settings.storage_dir / "users" / job.user_id / "cookies.txt"
-        download = await youtube.download(
-            youtube_url,
-            out_dir,
-            max_minutes=settings.max_input_minutes,
-            cookies_file=user_cookies if user_cookies.exists() else None,
-        )
-        logger.info(
-            "[job %s] downloaded %s (%.1fs)", job_id, download.title, download.duration_sec
-        )
+        if existing_source and Path(existing_source).exists():
+            # Stage 1 (upload variant): user upload udah ada, extract audio
+            await _set_status(job_id, JobStatus.DOWNLOADING)
+            video_path = Path(existing_source)
+            duration_sec = await ffmpeg.probe_duration(video_path)
+            max_sec = settings.max_input_minutes * 60
+            if duration_sec > max_sec:
+                raise youtube.TooLongError(
+                    f"Video {duration_sec:.0f}s > batas {max_sec}s"
+                )
+            audio_path = out_dir / "source.mp3"
+            await ffmpeg.extract_audio(video_path, audio_path)
+            logger.info(
+                "[job %s] uploaded source %.1fs, audio extracted",
+                job_id,
+                duration_sec,
+            )
+            await _set_status(
+                job_id,
+                JobStatus.TRANSCRIBING,
+                duration_sec=duration_sec,
+            )
+        else:
+            # Stage 1 (URL variant): download via yt-dlp
+            await _set_status(job_id, JobStatus.DOWNLOADING)
+            user_cookies = settings.storage_dir / "users" / user_id / "cookies.txt"
+            dl = await youtube.download(
+                youtube_url,
+                out_dir,
+                max_minutes=settings.max_input_minutes,
+                cookies_file=user_cookies if user_cookies.exists() else None,
+            )
+            video_path = dl.video_path
+            audio_path = dl.audio_path
+            duration_sec = dl.duration_sec
+            logger.info(
+                "[job %s] downloaded %s (%.1fs)", job_id, dl.title, duration_sec
+            )
+            await _set_status(
+                job_id,
+                JobStatus.TRANSCRIBING,
+                source_path=str(video_path),
+                duration_sec=duration_sec,
+            )
 
         # Stage 2: transcribe
-        await _set_status(
-            job_id,
-            JobStatus.TRANSCRIBING,
-            source_path=str(download.video_path),
-            duration_sec=download.duration_sec,
-        )
-        transcript = await transcribe.transcribe(download.audio_path, language="id")
+        transcript = await transcribe.transcribe(audio_path, language="id")
         transcript_path = out_dir / "transcript.json"
         transcribe.save_transcript(transcript, transcript_path)
         logger.info("[job %s] transcribed %d words", job_id, len(transcript.words))
@@ -170,7 +203,7 @@ async def process_job(job_id: str) -> None:
         await _set_status(job_id, JobStatus.RENDERING)
         await asyncio.gather(
             *[
-                _render_clip(job_id, download.video_path, transcript, h)
+                _render_clip(job_id, video_path, transcript, h)
                 for h in result.highlights
             ]
         )

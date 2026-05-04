@@ -127,6 +127,34 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ youtube_url }),
     }),
+  uploadJob: (file: File, onProgress?: (pct: number) => void) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return new Promise<Job>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `${API_URL}/jobs/upload`);
+      const token = getToken();
+      if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      xhr.upload.onprogress = (e) => {
+        if (onProgress && e.lengthComputable) {
+          onProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText));
+        } else {
+          let detail: string | undefined;
+          try {
+            detail = JSON.parse(xhr.responseText)?.detail;
+          } catch {}
+          reject(new ApiError(xhr.status, detail || `HTTP ${xhr.status}`, detail));
+        }
+      };
+      xhr.onerror = () => reject(new ApiError(0, "Network error"));
+      xhr.send(fd);
+    });
+  },
   listJobs: () => request<Job[]>("/jobs"),
   getJob: (id: string) => request<Job>(`/jobs/${id}`),
   clipUrl: (path: string) => `${API_URL}${path}`,
