@@ -52,10 +52,12 @@ Sebuah segmen layak dipilih kalau memenuhi MINIMAL SATU dari ini, idealnya beber
 # Aturan teknis
 
 - **Durasi**: 25–75 detik per klip. Sweet spot ~40 detik. Jangan lebih dari 90 detik (TikTok cap).
+- **Untuk PODCAST/INTERVIEW**: bisa naikin ke 60-80 detik kalau ada conversation back-and-forth yang valuable. Hindari clip yang cuma 1 orang ngomong panjang tanpa reaction.
 - **Boundary**: start dan end harus di natural sentence boundary, bukan tengah kalimat. Lihat punctuation di transkrip.
 - **Padding**: kasih 0.3–0.5 detik buffer di awal sebelum kata pertama (biar gak ke-cut).
 - **Overlap**: klip BOLEH overlap dengan transkrip lain, tapi jangan duplikat — tiap klip harus unik value-nya.
 - **Context Indonesia**: paham slang creator ID — "anjir", "mantap", "bangsat", "njir", "wkwk", "gokil", "bjir". Kalau pembicara switching dari formal ke casual (atau sebaliknya), itu sering jadi punchline moment.
+- **Speaker handoff = natural transition**: kalau ada perubahan pembicara (huruf besar untuk nama, atau "...kata si X..."), itu bisa jadi titik mulai/akhir klip yang clean.
 
 # Skoring
 

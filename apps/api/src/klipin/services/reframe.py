@@ -163,9 +163,26 @@ async def reframe_to_vertical(
     else:
         crop_w, crop_h, x, y = src_w, src_h, 0, 0
 
+    # Probe duration buat fade-out timing
+    duration = await ff.probe_duration(source)
+    fade_dur = 0.25
+    fade_out_start = max(0.0, duration - fade_dur)
+
+    # Filter chain:
+    # 1. crop landscape ke 9:16 area
+    # 2. scale ke target dimensions
+    # 3. fade in 0.25s di awal (smooth intro)
+    # 4. fade out 0.25s di akhir (smooth outro)
     vf = (
         f"crop={crop_w}:{crop_h}:{x}:{y},"
-        f"scale={target_w}:{target_h}:flags=lanczos"
+        f"scale={target_w}:{target_h}:flags=lanczos,"
+        f"fade=t=in:st=0:d={fade_dur},"
+        f"fade=t=out:st={fade_out_start:.3f}:d={fade_dur}"
+    )
+    # Audio juga di-fade biar gak ada click di awal/akhir
+    af = (
+        f"afade=t=in:st=0:d={fade_dur},"
+        f"afade=t=out:st={fade_out_start:.3f}:d={fade_dur}"
     )
 
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -173,6 +190,7 @@ async def reframe_to_vertical(
         "ffmpeg", "-y",
         "-i", str(source),
         "-vf", vf,
+        "-af", af,
         "-c:v", "libx264", "-preset", "fast", "-crf", "20",
         "-c:a", "aac", "-b:a", "128k",
         "-movflags", "+faststart",
