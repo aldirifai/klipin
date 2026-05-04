@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -9,488 +10,359 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/cn";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { CookiesPanel } from "./CookiesPanel";
+import { cn } from "@/lib/cn";
 
 const STATUS_LABEL: Record<JobStatus, string> = {
   queued: "Antri",
-  downloading: "Download video",
+  downloading: "Download",
   transcribing: "Transkrip",
-  analyzing: "Cari highlight",
-  rendering: "Render klip",
+  analyzing: "Analisis",
+  rendering: "Render",
   done: "Selesai",
   failed: "Gagal",
 };
 
-const STATUS_COLOR: Record<JobStatus, string> = {
-  queued: "bg-zinc-700/60 text-zinc-200",
-  downloading: "bg-blue-500/15 text-blue-300 ring-1 ring-blue-500/20",
-  transcribing: "bg-blue-500/15 text-blue-300 ring-1 ring-blue-500/20",
-  analyzing: "bg-purple-500/15 text-purple-300 ring-1 ring-purple-500/20",
-  rendering: "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20",
-  done: "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/20",
-  failed: "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/20",
+const STATUS_TONE: Record<JobStatus, string> = {
+  queued: "text-zinc-500 bg-zinc-500/10 ring-zinc-500/20",
+  downloading: "text-blue-600 bg-blue-500/10 ring-blue-500/20 dark:text-blue-400",
+  transcribing: "text-blue-600 bg-blue-500/10 ring-blue-500/20 dark:text-blue-400",
+  analyzing: "text-violet-600 bg-violet-500/10 ring-violet-500/20 dark:text-violet-400",
+  rendering: "text-amber-600 bg-amber-500/10 ring-amber-500/20 dark:text-amber-400",
+  done: "text-emerald-600 bg-emerald-500/10 ring-emerald-500/20 dark:text-emerald-400",
+  failed: "text-rose-600 bg-rose-500/10 ring-rose-500/20 dark:text-rose-400",
 };
 
 const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024; // 1 GB
+
 const POLL_INTERVAL_MS = 4000;
-
-const TERMINAL_STATUSES: ReadonlySet<JobStatus> = new Set<JobStatus>([
-  "done",
-  "failed",
-]);
-
-function jobsAllDone(jobs: Job[]): boolean {
-  if (jobs.length === 0) return false;
-  return jobs.every((j) => TERMINAL_STATUSES.has(j.status));
-}
-
-function LogoutIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-      <polyline points="16 17 21 12 16 7" />
-      <line x1="21" y1="12" x2="9" y2="12" />
-    </svg>
-  );
-}
-
-function JobSkeleton() {
-  return (
-    <Card className="flex items-center justify-between px-5 py-4">
-      <div className="min-w-0 flex-1 space-y-2 pr-4">
-        <Skeleton className="h-4 w-3/4" />
-        <Skeleton className="h-3 w-1/3" />
-      </div>
-      <Skeleton className="h-6 w-20 rounded-full" />
-    </Card>
-  );
-}
-
-function EmptyJobs() {
-  return (
-    <Card className="flex flex-col items-center justify-center px-6 py-14 text-center">
-      <div
-        className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-amber-400/15 to-rose-500/15 text-3xl"
-        aria-hidden="true"
-      >
-        🎬
-      </div>
-      <h3 className="font-display text-lg font-bold text-zinc-100">
-        Belum ada job
-      </h3>
-      <p className="mb-5 mt-1 max-w-sm text-sm text-zinc-400">
-        Upload video atau paste link YouTube di atas buat bikin klip viral
-        pertama kamu.
-      </p>
-    </Card>
-  );
-}
 
 export default function Dashboard() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
 
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [jobsLoaded, setJobsLoaded] = useState(false);
-  const [syncError, setSyncError] = useState(false);
-
+  const [jobsLoading, setJobsLoading] = useState(true);
   const [mode, setMode] = useState<"upload" | "url">("upload");
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [uploadPct, setUploadPct] = useState<number>(0);
+  const [uploadPct, setUploadPct] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  // Refs used by polling closure to avoid stale-closure / re-init churn.
   const allDoneRef = useRef(false);
   const pokeRef = useRef<() => void>(() => {});
 
-  useEffect(() => {
-    allDoneRef.current = jobsAllDone(jobs);
-  }, [jobs]);
-
+  // Auth gate
   useEffect(() => {
     if (!authLoading && !user) {
       router.replace("/login?next=/dashboard");
     }
   }, [authLoading, user, router]);
 
-  // Polling — installed once per user. Uses refs for stop-condition so we don't
-  // re-create the interval on every state change.
+  // Polling jobs (paused when all done|failed)
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
-    const fetchJobs = async () => {
+    const tick = async () => {
+      if (cancelled) return;
       try {
         const list = await api.listJobs();
         if (cancelled) return;
         setJobs(list);
-        setJobsLoaded(true);
-        setSyncError(false);
+        setJobsLoading(false);
+        const allDone = list.length > 0 && list.every((j) => j.status === "done" || j.status === "failed");
+        allDoneRef.current = allDone;
+        if (!allDone) timer = setTimeout(tick, POLL_INTERVAL_MS);
       } catch (err) {
-        if (cancelled) return;
-        // Non-destructive: keep last good state, surface a toast once.
-        console.warn("listJobs failed", err);
-        setJobsLoaded(true);
-        if (!syncError) {
-          toast.error("Gagal sync, retry…");
+        if (!cancelled) {
+          setJobsLoading(false);
+          if (err instanceof ApiError && err.status === 401) {
+            router.replace("/login");
+          }
+          timer = setTimeout(tick, POLL_INTERVAL_MS * 2);
         }
-        setSyncError(true);
       }
     };
 
-    const tick = async () => {
-      if (cancelled) return;
-      // Pause polling when nothing is in-progress; we'll wake on submit (poke).
-      if (!allDoneRef.current) {
-        await fetchJobs();
-      }
-      if (cancelled) return;
-      timeoutId = setTimeout(tick, POLL_INTERVAL_MS);
-    };
-
-    // Allow submit handlers to force an immediate refresh.
     pokeRef.current = () => {
-      void fetchJobs();
+      if (cancelled) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(tick, 50);
     };
 
-    // Initial load (always) then start the polling chain.
-    void fetchJobs();
-    timeoutId = setTimeout(tick, POLL_INTERVAL_MS);
-
+    tick();
     return () => {
       cancelled = true;
-      if (timeoutId) clearTimeout(timeoutId);
-      pokeRef.current = () => {};
+      if (timer) clearTimeout(timer);
     };
-    // Empty-deps for the stable polling loop; user gating handled at top.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   async function handleUrlSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
     if (!url.trim()) return;
     setSubmitting(true);
     try {
-      const job = await api.createJob(url);
-      setUrl("");
-      // Resume polling immediately.
-      allDoneRef.current = false;
-      pokeRef.current();
-      toast.success("Job dibuat");
+      const job = await api.createJob(url.trim());
       router.push(`/dashboard/${job.id}`);
     } catch (err) {
-      const msg =
-        err instanceof ApiError ? err.detail || err.message : "Gagal submit";
-      setError(msg);
+      const msg = err instanceof ApiError ? err.detail || err.message : "Gagal submit";
       toast.error(msg);
-    } finally {
       setSubmitting(false);
     }
   }
 
   async function handleUploadSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
     if (!file) return;
-
     if (file.size > MAX_UPLOAD_BYTES) {
-      const msg = `File kegedean. Max 1 GB, file kamu ${(
-        file.size /
-        1024 /
-        1024
-      ).toFixed(1)} MB.`;
-      setError(msg);
-      toast.error(msg);
+      toast.error(`File terlalu besar (max 1GB). File kamu ${(file.size / 1024 / 1024).toFixed(0)}MB.`);
       return;
     }
-
     setSubmitting(true);
     setUploadPct(0);
     try {
       const job = await api.uploadJob(file, setUploadPct);
-      setFile(null);
-      allDoneRef.current = false;
-      pokeRef.current();
-      toast.success("Video ke-upload, lagi diproses…");
       router.push(`/dashboard/${job.id}`);
     } catch (err) {
-      const msg =
-        err instanceof ApiError ? err.detail || err.message : "Gagal upload";
-      setError(msg);
+      const msg = err instanceof ApiError ? err.detail || err.message : "Gagal upload";
       toast.error(msg);
       setSubmitting(false);
     }
   }
 
-  function handleLogout() {
-    logout(router, "/");
-  }
-
   if (authLoading || !user) {
     return (
-      <main
-        className="flex flex-1 items-center justify-center px-6 py-10"
-        aria-busy="true"
-      >
-        <div className="w-full max-w-5xl space-y-6">
-          <Skeleton className="h-9 w-48" />
-          <Skeleton className="h-5 w-80" />
-          <Skeleton className="h-12 w-full rounded-xl" />
-          <Skeleton className="h-32 w-full rounded-2xl" />
-        </div>
+      <main className="flex flex-1 items-center justify-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-[color:var(--border)] border-t-[color:var(--accent)]" />
       </main>
     );
   }
 
+  const inProgressCount = jobs.filter((j) => !["done", "failed"].includes(j.status)).length;
+
   return (
     <>
-      <header className="border-b border-white/5 bg-zinc-950/70 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
-          <a
-            href="/"
-            className="flex items-center gap-2 transition-opacity hover:opacity-90"
-          >
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-rose-500 font-black text-zinc-950">
-              K
-            </div>
-            <span className="font-display text-lg font-bold">Klipin</span>
-          </a>
-          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-            <span
-              className="hidden max-w-[14rem] truncate text-sm text-zinc-400 sm:inline"
-              title={user.email}
-            >
-              {user.email}
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleLogout}
-              className="min-h-[44px] sm:min-h-0"
-              aria-label="Logout"
-            >
-              <LogoutIcon />
-              <span>Logout</span>
-            </Button>
+      <DashHeader user={user} />
+
+      <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8 sm:py-10">
+        <div className="mb-8 flex items-end justify-between gap-4">
+          <div>
+            <h1 className="font-display text-2xl font-bold sm:text-3xl">Dashboard</h1>
+            <p className="mt-1 text-sm text-[color:var(--text-muted)]">
+              Upload video atau paste link YouTube, AI bikin klipnya.
+            </p>
           </div>
+          {inProgressCount > 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--bg-elevated)] px-3 py-1 text-xs font-medium text-[color:var(--text-muted)]">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[color:var(--accent)]" />
+              {inProgressCount} sedang diproses
+            </span>
+          )}
         </div>
-      </header>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
-        <h1 className="mb-2 font-display text-3xl font-bold tracking-tight">
-          Dashboard
-        </h1>
-        <p className="mb-6 text-zinc-400">
-          Upload video atau paste link YouTube buat bikin klip baru.
-        </p>
-
-        <Card className="mb-4 flex gap-1 p-1">
-          <button
-            type="button"
-            onClick={() => setMode("upload")}
-            className={cn(
-              "flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors duration-150 active:scale-[0.98]",
-              "min-h-[44px]",
-              mode === "upload"
-                ? "bg-gradient-to-r from-amber-400 to-rose-500 text-zinc-950 shadow-lg shadow-rose-500/10"
-                : "text-zinc-400 hover:text-zinc-100",
-            )}
-            aria-pressed={mode === "upload"}
-          >
-            Upload Video
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("url")}
-            className={cn(
-              "flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors duration-150 active:scale-[0.98]",
-              "min-h-[44px]",
-              mode === "url"
-                ? "bg-gradient-to-r from-amber-400 to-rose-500 text-zinc-950 shadow-lg shadow-rose-500/10"
-                : "text-zinc-400 hover:text-zinc-100",
-            )}
-            aria-pressed={mode === "url"}
-          >
-            YouTube URL
-          </button>
-        </Card>
-
-        {mode === "url" && <CookiesPanel />}
-
-        {mode === "upload" ? (
-          <form onSubmit={handleUploadSubmit} className="mb-10">
-            <label
-              htmlFor="upload-file"
+        <Card className="mb-6 p-5 sm:p-6">
+          <div className="mb-4 flex gap-1 rounded-lg bg-[color:var(--bg-muted)] p-1">
+            <button
+              type="button"
+              onClick={() => setMode("upload")}
               className={cn(
-                "block w-full cursor-pointer rounded-xl border border-dashed bg-zinc-900/40 px-5 py-8 text-center text-sm transition-colors duration-150",
-                "border-zinc-700 hover:border-amber-400/60 hover:bg-zinc-900/60",
-                submitting && "opacity-60 pointer-events-none",
+                "flex-1 rounded-md px-4 py-2 text-sm font-semibold transition-colors",
+                mode === "upload"
+                  ? "bg-[color:var(--bg)] text-[color:var(--text)] shadow-sm"
+                  : "text-[color:var(--text-muted)] hover:text-[color:var(--text)]",
               )}
             >
+              Upload Video
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("url")}
+              className={cn(
+                "flex-1 rounded-md px-4 py-2 text-sm font-semibold transition-colors",
+                mode === "url"
+                  ? "bg-[color:var(--bg)] text-[color:var(--text)] shadow-sm"
+                  : "text-[color:var(--text-muted)] hover:text-[color:var(--text)]",
+              )}
+            >
+              YouTube URL
+            </button>
+          </div>
+
+          {mode === "upload" ? (
+            <form onSubmit={handleUploadSubmit}>
+              <label
+                htmlFor="upload-file"
+                className={cn(
+                  "flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-[color:var(--border-strong)] bg-[color:var(--bg)] px-6 py-10 text-center transition-colors",
+                  "hover:border-[color:var(--accent)] hover:bg-[color:var(--bg-elevated)]",
+                )}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="mb-3 h-8 w-8 text-[color:var(--text-muted)]"
+                  aria-hidden="true"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+                </svg>
+                {file ? (
+                  <>
+                    <p className="text-sm font-medium">{file.name}</p>
+                    <p className="mt-1 text-xs text-[color:var(--text-muted)]">
+                      {(file.size / 1024 / 1024).toFixed(1)} MB · klik buat ganti
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-medium">Klik untuk pilih file</p>
+                    <p className="mt-1 text-xs text-[color:var(--text-muted)]">
+                      MP4, MOV, MKV, WebM · max 1GB
+                    </p>
+                  </>
+                )}
+              </label>
               <input
                 id="upload-file"
                 type="file"
                 accept="video/mp4,video/quicktime,video/x-matroska,video/webm,.mp4,.mov,.mkv,.webm"
                 required
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                 disabled={submitting}
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                 className="sr-only"
               />
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-2xl" aria-hidden="true">
-                  📤
-                </span>
-                <span className="font-semibold text-zinc-200">
-                  {file ? "Ganti file" : "Pilih file video"}
-                </span>
-                <span className="text-xs text-zinc-500">
-                  mp4, mov, mkv, webm · max 1 GB
-                </span>
-              </div>
-            </label>
 
-            {file && (
-              <p className="mt-3 text-sm text-zinc-400">
-                <span className="text-zinc-200">{file.name}</span> ·{" "}
-                {(file.size / 1024 / 1024).toFixed(1)} MB
-              </p>
-            )}
-
-            {submitting && (
-              <div className="mt-3">
-                <div className="mb-1 flex justify-between text-xs text-zinc-400">
-                  <span>Uploading…</span>
-                  <span>{uploadPct}%</span>
+              {submitting && (
+                <div className="mt-4">
+                  <div className="mb-1.5 flex justify-between text-xs text-[color:var(--text-muted)]">
+                    <span>Uploading…</span>
+                    <span>{uploadPct}%</span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-[color:var(--bg-muted)]">
+                    <div
+                      className="h-full bg-[color:var(--accent)] transition-[width] duration-200"
+                      style={{ width: `${uploadPct}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
-                  <div
-                    className="h-full bg-gradient-to-r from-amber-400 to-rose-500 transition-[width] duration-150"
-                    style={{ width: `${uploadPct}%` }}
+              )}
+
+              <Button type="submit" size="lg" loading={submitting} disabled={!file} fullWidth className="mt-4">
+                {submitting ? "Uploading…" : "Klip Video"}
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={handleUrlSubmit} className="space-y-3">
+              <CookiesPanel />
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="flex-1">
+                  <Input
+                    id="job-url"
+                    type="url"
+                    inputMode="url"
+                    autoComplete="off"
+                    required
+                    placeholder="https://youtube.com/watch?v=..."
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    aria-label="Link YouTube"
                   />
                 </div>
+                <Button type="submit" size="lg" loading={submitting}>
+                  {submitting ? "Submit…" : "Klip"}
+                </Button>
               </div>
-            )}
+            </form>
+          )}
+        </Card>
 
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              fullWidth
-              loading={submitting}
-              disabled={!file}
-              className="mt-4"
-            >
-              {submitting ? "Uploading…" : "Klip Video"}
-            </Button>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-[color:var(--text-muted)]">
+          Job kamu
+        </h2>
 
-            <p className="mt-2 text-xs text-zinc-500">
-              Format: mp4, mov, mkv, webm. Max 1 GB. Buat YouTube link, install
-              extension &quot;Yout&quot; atau pakai yt-dlp di komputer kamu,
-              lalu upload hasilnya di sini.
-            </p>
-          </form>
-        ) : (
-          <form
-            onSubmit={handleUrlSubmit}
-            className="mb-10 flex flex-col gap-3 sm:flex-row"
-          >
-            <div className="flex-1">
-              <Input
-                id="yt-url"
-                type="url"
-                required
-                placeholder="https://youtube.com/watch?v=..."
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                disabled={submitting}
-              />
-            </div>
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              loading={submitting}
-              disabled={!url.trim()}
-            >
-              {submitting ? "Submit…" : "Klip"}
-            </Button>
-          </form>
-        )}
-
-        {error && (
-          <div
-            role="alert"
-            className="mb-4 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300"
-          >
-            {error}
-          </div>
-        )}
-
-        <h2 className="mb-4 font-display text-lg font-bold">Job kamu</h2>
-
-        {!jobsLoaded ? (
-          <div className="space-y-3">
-            <JobSkeleton />
-            <JobSkeleton />
-            <JobSkeleton />
+        {jobsLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-16 w-full" />
+            ))}
           </div>
         ) : jobs.length === 0 ? (
-          <EmptyJobs />
+          <Card className="px-6 py-12 text-center">
+            <p className="text-sm text-[color:var(--text-muted)]">
+              Belum ada job. Upload video pertamamu di atas.
+            </p>
+          </Card>
         ) : (
-          <ul className="space-y-3">
+          <ul className="space-y-2">
             {jobs.map((job) => (
-              <li key={job.id}>
-                <a
-                  href={`/dashboard/${job.id}`}
-                  className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 rounded-2xl"
-                >
-                  <Card
-                    hoverable
-                    className="flex items-center justify-between gap-3 px-5 py-4"
-                  >
-                    <div className="min-w-0 flex-1 pr-2">
-                      <p className="truncate text-sm text-zinc-200">
-                        {job.youtube_url.startsWith("upload://")
-                          ? `📤 ${job.youtube_url.slice(9)}`
-                          : job.youtube_url}
-                      </p>
-                      <p className="mt-1 text-xs text-zinc-500">
-                        {job.clips.length} klip
-                        {job.duration_sec
-                          ? ` · ${(job.duration_sec / 60).toFixed(1)} menit input`
-                          : ""}
-                      </p>
-                    </div>
-                    <span
-                      className={cn(
-                        "shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold",
-                        STATUS_COLOR[job.status],
-                      )}
-                    >
-                      {STATUS_LABEL[job.status]}
-                    </span>
-                  </Card>
-                </a>
-              </li>
+              <JobRow key={job.id} job={job} />
             ))}
           </ul>
         )}
       </main>
     </>
+  );
+}
+
+function DashHeader({ user }: { user: { email: string } }) {
+  const router = useRouter();
+  return (
+    <header className="border-b border-[color:var(--border)] bg-[color:var(--bg)]">
+      <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3.5">
+        <Link href="/" className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[color:var(--accent)] font-black text-[color:var(--accent-fg)]">
+            K
+          </div>
+          <span className="font-display text-lg font-bold tracking-tight">Klipin</span>
+        </Link>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <span className="hidden text-sm text-[color:var(--text-muted)] sm:inline">{user.email}</span>
+          <Button size="sm" variant="ghost" onClick={() => logout(router, "/")}>
+            Logout
+          </Button>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function JobRow({ job }: { job: Job }) {
+  const isUpload = job.youtube_url.startsWith("upload://");
+  const display = isUpload ? job.youtube_url.slice(9) : job.youtube_url;
+  return (
+    <li>
+      <Link
+        href={`/dashboard/${job.id}`}
+        className="flex items-center gap-4 rounded-lg border border-[color:var(--border)] bg-[color:var(--bg-elevated)] px-4 py-3 transition-colors hover:border-[color:var(--border-strong)]"
+      >
+        <span className="text-xl" aria-hidden="true">{isUpload ? "📤" : "🔗"}</span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium" title={display}>
+            {display}
+          </p>
+          <p className="mt-0.5 text-xs text-[color:var(--text-muted)]">
+            {job.clips.length} klip
+            {job.duration_sec ? ` · ${(job.duration_sec / 60).toFixed(1)} menit` : ""}
+          </p>
+        </div>
+        <span
+          className={cn(
+            "shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ring-1",
+            STATUS_TONE[job.status],
+          )}
+        >
+          {STATUS_LABEL[job.status]}
+        </span>
+      </Link>
+    </li>
   );
 }

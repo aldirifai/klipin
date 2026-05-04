@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Plus_Jakarta_Sans } from "next/font/google";
+import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/toaster";
 import "./globals.css";
 
@@ -16,25 +17,55 @@ const jakartaSans = Plus_Jakarta_Sans({
   display: "swap",
 });
 
+const SITE_URL = "https://klipin.aldirifai.com";
+
 export const metadata: Metadata = {
-  title: "Klipin — AI Video Clipper Indonesia",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "Klipin — AI Video Clipper untuk Creator Indonesia",
+    template: "%s · Klipin",
+  },
   description:
-    "Upload video panjang, dapat klip pendek 9:16 viral siap upload TikTok / Reels / Shorts. Otomatis dengan subtitle animasi & auto-reframe.",
+    "Upload video podcast/vlog panjang, AI Klipin pilih momen viral otomatis, crop ke 9:16, burn-in subtitle. Klip siap upload TikTok, Reels, Shorts dalam menit. Lifetime access Rp 129.000.",
+  keywords: [
+    "AI video clipper Indonesia",
+    "buat klip TikTok otomatis",
+    "podcast ke shorts",
+    "auto subtitle Indonesia",
+    "Klipin",
+  ],
+  alternates: { canonical: SITE_URL },
+  openGraph: {
+    type: "website",
+    locale: "id_ID",
+    url: SITE_URL,
+    title: "Klipin — AI Video Clipper untuk Creator Indonesia",
+    description:
+      "Upload video panjang → klip viral 9:16 dengan subtitle animasi otomatis.",
+    siteName: "Klipin",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Klipin — AI Video Clipper Indonesia",
+    description: "Upload video panjang → klip viral 9:16 + subtitle otomatis.",
+  },
+  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html
       lang="id"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${jakartaSans.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-100">
-        {children}
-        <Toaster />
+      <body className="min-h-full flex flex-col">
+        <ThemeProvider>
+          {children}
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

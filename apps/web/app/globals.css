@@ -6,42 +6,62 @@
   --font-display: "Plus Jakarta Sans", var(--font-geist-sans), system-ui, sans-serif;
 }
 
-body {
-  font-family: var(--font-sans), system-ui, sans-serif;
-  background: #09090b;
-  color: #fafafa;
+/* Light theme (default) */
+:root {
+  --bg: #ffffff;
+  --bg-elevated: #f8fafc;
+  --bg-muted: #f1f5f9;
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
+  --text: #18181b;
+  --text-muted: #52525b;
+  --text-subtle: #71717a;
+  --accent: #d97706;          /* amber-600 */
+  --accent-hover: #b45309;     /* amber-700 */
+  --accent-fg: #ffffff;
+  --danger: #dc2626;
+  --success: #059669;
 }
 
-/* Smooth scroll for in-page anchors */
+/* Dark theme */
+.dark {
+  --bg: #09090b;               /* zinc-950 */
+  --bg-elevated: #18181b;       /* zinc-900 */
+  --bg-muted: #27272a;          /* zinc-800 */
+  --border: #27272a;
+  --border-strong: #3f3f46;
+  --text: #fafafa;
+  --text-muted: #a1a1aa;
+  --text-subtle: #71717a;
+  --accent: #f59e0b;            /* amber-500 */
+  --accent-hover: #fbbf24;       /* amber-400 */
+  --accent-fg: #18181b;
+  --danger: #f87171;
+  --success: #34d399;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
 html {
   scroll-behavior: smooth;
 }
 
-/* Hide native scrollbar, keep functionality */
+/* Subtle scroll bar */
 .scrollbar-thin::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: rgb(63 63 70 / 0.5);
+  background: var(--border-strong);
   border-radius: 3px;
 }
 .scrollbar-thin::-webkit-scrollbar-track {
   background: transparent;
-}
-
-/* Subtle shimmer for skeleton, smoother than pulse */
-@keyframes shimmer {
-  0% { background-position: -100% 0; }
-  100% { background-position: 100% 0; }
-}
-.shimmer {
-  background: linear-gradient(
-    90deg,
-    rgb(39 39 42 / 0.5) 0%,
-    rgb(63 63 70 / 0.7) 50%,
-    rgb(39 39 42 / 0.5) 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
 }

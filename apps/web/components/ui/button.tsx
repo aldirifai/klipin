@@ -15,21 +15,21 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClasses: Record<Variant, string> = {
   primary:
-    "bg-gradient-to-r from-amber-400 to-rose-500 text-zinc-950 shadow-lg shadow-rose-500/20 hover:shadow-rose-500/30 active:from-amber-500 active:to-rose-600",
+    "bg-[color:var(--accent)] text-[color:var(--accent-fg)] hover:bg-[color:var(--accent-hover)] active:opacity-90",
   secondary:
-    "bg-zinc-800 text-zinc-100 hover:bg-zinc-700 active:bg-zinc-600 border border-white/5",
+    "bg-[color:var(--bg-muted)] text-[color:var(--text)] hover:bg-[color:var(--border)] border border-[color:var(--border)]",
   ghost:
-    "text-zinc-300 hover:bg-white/5 hover:text-white active:bg-white/10",
+    "text-[color:var(--text-muted)] hover:text-[color:var(--text)] hover:bg-[color:var(--bg-muted)]",
   outline:
-    "border border-zinc-700 bg-transparent text-zinc-100 hover:bg-zinc-900 hover:border-zinc-600 active:bg-zinc-800",
+    "border border-[color:var(--border-strong)] bg-transparent text-[color:var(--text)] hover:bg-[color:var(--bg-muted)]",
   danger:
-    "bg-rose-500/10 border border-rose-500/40 text-rose-300 hover:bg-rose-500/20 active:bg-rose-500/30",
+    "bg-rose-500/10 border border-rose-500/40 text-rose-500 hover:bg-rose-500/20 dark:text-rose-400",
 };
 
 const sizeClasses: Record<Size, string> = {
   sm: "h-9 px-3 text-sm rounded-lg",
-  md: "h-11 px-5 text-sm rounded-xl",
-  lg: "h-13 px-6 text-base rounded-xl",
+  md: "h-10 px-5 text-sm rounded-lg",
+  lg: "h-12 px-6 text-base rounded-lg",
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -39,9 +39,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         disabled={disabled || loading}
         className={cn(
-          "inline-flex items-center justify-center gap-2 font-semibold transition-all duration-150 ease-out",
-          "active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950",
+          "inline-flex items-center justify-center gap-2 font-semibold transition-colors duration-150",
+          "active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--bg)]",
           variantClasses[variant],
           sizeClasses[size],
           fullWidth && "w-full",
@@ -49,14 +49,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         )}
         {...props}
       >
-        {loading ? (
-          <>
-            <Spinner />
-            <span>{children}</span>
-          </>
-        ) : (
-          children
-        )}
+        {loading && <Spinner />}
+        {children}
       </button>
     );
   },

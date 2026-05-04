@@ -15,7 +15,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={id}
-            className="mb-2 block text-sm font-medium text-zinc-300"
+            className="mb-2 block text-sm font-medium text-[color:var(--text)]"
           >
             {label}
           </label>
@@ -24,11 +24,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           id={id}
           ref={ref}
           className={cn(
-            "w-full rounded-xl border bg-zinc-900 px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-500 transition-colors duration-150",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50",
+            "w-full rounded-lg border bg-[color:var(--bg)] px-4 py-2.5 text-sm text-[color:var(--text)] placeholder:text-[color:var(--text-subtle)] transition-colors duration-150",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)]",
             error
               ? "border-rose-500/60 focus-visible:border-rose-500"
-              : "border-zinc-800 focus-visible:border-amber-400/60",
+              : "border-[color:var(--border-strong)] focus-visible:border-[color:var(--accent)]",
             className,
           )}
           aria-invalid={!!error || undefined}
@@ -38,7 +38,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         {error && (
           <p
             id={`${id}-error`}
-            className="mt-1.5 text-xs text-rose-400"
+            className="mt-1.5 text-xs text-rose-500 dark:text-rose-400"
             role="alert"
           >
             {error}
