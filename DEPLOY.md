@@ -93,6 +93,50 @@ Rebuild web container biar `NEXT_PUBLIC_API_URL` ke-bake ke bundle:
 docker compose up -d --build web
 ```
 
+## Setup cookies untuk yt-dlp (kalau YouTube blokir)
+
+VPS dari datacenter sering kena YouTube bot detection (PO Token requirement).
+Workaround: export cookies dari browser kamu yang udah login ke YouTube.
+
+**Step 1 — di komputer lokal kamu (Windows/Mac):**
+
+Pakai yt-dlp lewat uv (gak perlu install global):
+
+```powershell
+# Di PowerShell, dari folder repo:
+cd D:\Explore\clipper\apps\api
+uv run yt-dlp --cookies-from-browser firefox --cookies cookies.txt `
+    --skip-download "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+```
+
+Pakai Chrome/Edge ganti `firefox` jadi `chrome` atau `edge`. Pastikan
+browser-nya udah login ke akun YouTube. File `cookies.txt` akan dibuat.
+
+**Step 2 — upload ke VPS:**
+
+```bash
+scp cookies.txt root@VPS_IP:/var/www/klipin.aldirifai.com/cookies.txt
+```
+
+**Step 3 — aktifkan di server:**
+
+```bash
+cd /var/www/klipin.aldirifai.com
+
+# Aktifkan mount di docker-compose.yml — uncomment line cookies.txt:
+sed -i 's|# - ./cookies.txt|- ./cookies.txt|' docker-compose.yml
+
+# Aktifkan env var — uncomment YOUTUBE_COOKIES_FILE di .env:
+sed -i 's|# YOUTUBE_COOKIES_FILE|YOUTUBE_COOKIES_FILE|' .env
+
+# Recreate container biar mount + env aktif:
+docker compose up -d --force-recreate api
+```
+
+**Step 4 — test ulang submit job.**
+
+Cookies expire ~30 hari. Kalau yt-dlp mulai gagal lagi, ulangi step 1-3.
+
 ## Bikin superadmin / user lifetime
 
 Buat user dengan plan lifetime (bypass payment) — biasanya dipakai untuk akun

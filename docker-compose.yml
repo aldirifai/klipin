@@ -27,6 +27,11 @@ services:
     volumes:
       - klipin_storage:/app/storage
       - klipin_data:/app/data
+      # Mount cookies.txt kalau yt-dlp kena bot detection (YouTube PO Token).
+      # Aktifkan kalau perlu — lihat DEPLOY.md "Setup cookies untuk yt-dlp".
+      # Compose akan error kalau file gak ada, jadi UNCOMMENT cuma kalau
+      # cookies.txt udah di-upload ke server.
+      # - ./cookies.txt:/app/cookies.txt:ro
     networks:
       - klipin
     healthcheck:
