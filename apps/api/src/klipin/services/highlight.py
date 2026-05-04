@@ -74,10 +74,18 @@ Return JSON dengan field `highlights`, list of objek dengan:
 - `end` (float, detik)
 - `hook_score` (float, 0.0–1.0)
 - `reason` (string, satu kalimat — kenapa klip ini dipilih, gaya bicara santai untuk dashboard creator)
-- `title` (string, max 60 char — judul singkat klip, bisa langsung dipakai sebagai caption TikTok)
-- `caption` (string, max 200 char — caption optional yang catchy)
+- `title` (string, 6–12 kata — judul VIRAL-style siap pakai sebagai overlay/description di TikTok. ALL CAPS untuk power words boleh, emoji 1 max. Format: hook + curiosity. Contoh: "Cara Gue KELUAR dari Gaji UMR (Spill Rahasia 🤫)")
+- `caption` (string, 200–350 char — caption SIAP PAKAI buat TikTok/Reels description. Format: 1-2 kalimat hook/insight + emoji 1-3 + hashtags 6-10 di akhir (mix viral umum + niche topik). Hashtag wajib relevan ke konten — JANGAN spam #fyp #foryou doang)
 
 Urutkan berdasarkan `hook_score` desc.
+
+# Hashtag strategy untuk caption
+
+- **2-3 hashtag viral umum**: #fyp #fypシ #foryou #masukberanda
+- **3-5 hashtag niche topik**: sesuai konten (#bisnis #moneymindset #podcast #financial #tipskerja #kontenkreator dll)
+- **1-2 hashtag lokasi/bahasa**: #indonesia #fypindonesia
+- Total 6-10 hashtag, no more no less.
+- Hashtag pakai underscore atau camelCase kalau multi-word: #digitalmarketing bukan #digital marketing.
 
 # Contoh
 
@@ -97,16 +105,16 @@ Output:
       "end": 47.0,
       "hook_score": 0.92,
       "reason": "Hook personal banget — confession 'gue dulu cleaning service' langsung pull empathy. Story arc lengkap dalam 30 detik.",
-      "title": "Dari Cleaning Service ke 2 Juta Views TikTok",
-      "caption": "Story gue keluar dari gaji 1.8 juta. Jangan kerja keras doang — kerja yang dilihat orang."
+      "title": "Dari Cleaning Service Jadi 2 JUTA Views (Story Gue) 🔥",
+      "caption": "Dulu gaji 1.8 juta tiap hari nyapu mall. Sekarang? Konten gue ditonton 2 juta orang. Ini bukan luck — ini strategi. 👇\n\n#fyp #fypシ #masukberanda #ceritakerja #cuanvid #kontenkreator #motivasiindonesia #fypindonesia #moneymindset #storytime"
     },
     {
       "start": 44.8,
       "end": 80.5,
       "hook_score": 0.88,
       "reason": "Punchline kuat 'kerja yang DILIHAT orang' + cliffhanger 'gue mau spill rahasianya'. Curiosity gap tinggi.",
-      "title": "Kenapa Most People Stuck di UMR Selamanya",
-      "caption": "Kerja keras ≠ jawaban. Yang penting kerja yang dilihat. Spill rahasianya 👇"
+      "title": "Kenapa Lo STUCK di UMR Selamanya (Spill 🤫)",
+      "caption": "Kerja keras doang ≠ jawaban. Yang bikin lo naik gaji = kerja yang DILIHAT orang. Banyak yang gak ngeh ini.\n\n#fyp #foryou #karir #moneymindset #tipskerja #personalbranding #fypindonesia #bisnisindonesia #cuan #masukberanda"
     }
   ]
 }
@@ -120,8 +128,8 @@ class Highlight(BaseModel):
     end: float = Field(ge=0)
     hook_score: float = Field(ge=0, le=1)
     reason: str = Field(max_length=500)
-    title: str = Field(max_length=120)
-    caption: str = Field(default="", max_length=400)
+    title: str = Field(max_length=200)
+    caption: str = Field(default="", max_length=600)
 
 
 class HighlightsOutput(BaseModel):
