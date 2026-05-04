@@ -1,30 +1,21 @@
-# Klipin API — Python 3.13 + FFmpeg + uv + Node (for yt-dlp PO Token plugin)
+# Klipin API — Python 3.13 + FFmpeg + uv
 FROM python:3.13-slim AS base
 
 # System deps:
 #   ffmpeg          — video pipeline
 #   libgl1          — required by opencv (mediapipe transitively)
 #   libglib2.0-0    — opencv runtime
-#   ca-certificates — outbound HTTPS (Replicate, Anthropic, Midtrans, YouTube)
-#   curl, gnupg     — buat install Node.js dari NodeSource
+#   ca-certificates — outbound HTTPS
 #
-# Node.js 22 LTS dari NodeSource (debian repo punya v18 yang udah ketinggalan).
-# Node dibutuhkan oleh bgutil-ytdlp-pot-provider — plugin yt-dlp yang
-# auto-generate YouTube PO Token (anti-bot bypass per Q4 2025).
+# YouTube PO Token di-handle oleh bgutil-pot service terpisah (lihat
+# docker-compose.yml). Plugin Python `bgutil-ytdlp-pot-provider` di
+# pyproject.toml akan query service via HTTP — gak perlu Node di image ini.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libgl1 \
     libglib2.0-0 \
     ca-certificates \
-    curl \
-    gnupg \
-    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
-
-# bgutil PO Token generator (Node.js script). yt-dlp plugin nanti panggil
-# command `bgutil-pot` ini per-request buat dapet token.
-RUN npm install -g bgutil-ytdlp-pot-provider
 
 # Install uv (fast Python package manager)
 COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /usr/local/bin/

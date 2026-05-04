@@ -12,6 +12,15 @@
 #   docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d --build
 
 services:
+  bgutil-pot:
+    # YouTube PO Token generator — yt-dlp plugin di api container query
+    # service ini via HTTP buat dapet token (bypass YouTube anti-bot).
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    restart: unless-stopped
+    init: true
+    networks:
+      - klipin
+
   api:
     build:
       context: ./apps/api
@@ -22,6 +31,7 @@ services:
     environment:
       STORAGE_DIR: /app/storage
       DATABASE_URL: sqlite+aiosqlite:////app/data/klipin.db
+      BG_UTIL_POT_PROVIDER_URL: http://bgutil-pot:4416
     ports:
       - "${API_BIND:-127.0.0.1}:${API_PORT:-9787}:8000"
     volumes:
@@ -34,6 +44,8 @@ services:
       # - ./cookies.txt:/app/cookies.txt:ro
     networks:
       - klipin
+    depends_on:
+      - bgutil-pot
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
       interval: 30s

@@ -87,10 +87,15 @@ def _ydl_opts(out_dir: Path, max_minutes: int) -> dict:
         "fragment_retries": 5,
         "concurrent_fragment_downloads": 4,
         "extractor_args": {
-            # bgutil-ytdlp-pot-provider plugin auto-generate PO Token,
-            # jadi web client (formats paling lengkap) bisa kepake.
-            # Fallback ke tv_simply + mweb kalau web kena.
+            # bgutil PO Token plugin (lihat bgutil-pot service di
+            # docker-compose.yml) auto-generate token via HTTP. Plugin ke-load
+            # otomatis dari Python entrypoint.
             "youtube": {"player_client": ["web", "tv_simply", "mweb"]},
+            "youtubepot-bgutilhttp": {
+                "base_url": [
+                    os.environ.get("BG_UTIL_POT_PROVIDER_URL", "http://bgutil-pot:4416"),
+                ],
+            },
         },
     }
 
