@@ -6,15 +6,18 @@ FROM python:3.13-slim AS base
 #   libgl1          — required by opencv (mediapipe transitively)
 #   libglib2.0-0    — opencv runtime
 #   ca-certificates — outbound HTTPS
+#   nodejs          — yt-dlp pakai Node buat solve YouTube n-parameter
+#                     challenge (kalau gak ada, formats incomplete dan
+#                     download fail)
 #
-# YouTube PO Token di-handle oleh bgutil-pot service terpisah (lihat
-# docker-compose.yml). Plugin Python `bgutil-ytdlp-pot-provider` di
-# pyproject.toml akan query service via HTTP — gak perlu Node di image ini.
+# PO Token sendiri di-handle oleh bgutil-pot service terpisah (HTTP-based,
+# lihat docker-compose.yml). Itu beda dari n challenge.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libgl1 \
     libglib2.0-0 \
     ca-certificates \
+    nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv (fast Python package manager)
