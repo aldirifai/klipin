@@ -1,6 +1,18 @@
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _default_storage_dir() -> Path:
+    """Default storage location. In dev: <repo-root>/storage (cari folder
+    yang punya 'apps/' subdir). In Docker: /app/storage (cwd). Env
+    STORAGE_DIR override-nya."""
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        if (parent / "apps").is_dir():
+            return parent / "storage"
+    return Path.cwd() / "storage"
 
 
 class Settings(BaseSettings):
@@ -12,7 +24,7 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
     cors_origins: list[str] = ["http://localhost:3000"]
 
-    storage_dir: Path = Path(__file__).resolve().parents[4] / "storage"
+    storage_dir: Path = Field(default_factory=_default_storage_dir)
 
     max_input_minutes: int = 60
     whisper_model: str = "openai/whisper"
