@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ApiError, api, type Job, type JobStatus } from "@/lib/api";
 import { useAuth, logout } from "@/lib/auth";
+import { CookiesPanel } from "./CookiesPanel";
 
 const STATUS_LABEL: Record<JobStatus, string> = {
   queued: "Antri",
@@ -106,9 +107,11 @@ export default function Dashboard() {
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-10">
         <h1 className="mb-2 text-3xl font-bold">Dashboard</h1>
-        <p className="mb-8 text-neutral-400">
+        <p className="mb-6 text-neutral-400">
           Paste link YouTube buat bikin klip baru, atau lihat job sebelumnya.
         </p>
+
+        <CookiesPanel />
 
         <form onSubmit={handleSubmit} className="mb-10 flex flex-col gap-3 sm:flex-row">
           <input

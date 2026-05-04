@@ -57,7 +57,7 @@ class _YDLLogger:
         logger.error("yt-dlp: %s", msg)
 
 
-def _ydl_opts(out_dir: Path, max_minutes: int) -> dict:
+def _ydl_opts(out_dir: Path, max_minutes: int, cookies_override: Path | None = None) -> dict:
     opts: dict = {
         # Multi-tier fallback: prefer 1080p video+audio, tapi fallback ke
         # whatever yang available. Beberapa video gak punya format yang
@@ -99,8 +99,12 @@ def _ydl_opts(out_dir: Path, max_minutes: int) -> dict:
         },
     }
 
-    # Optional: cookies dari env (untuk bypass bot detection di datacenter IP)
-    cookies_file = os.environ.get("YOUTUBE_COOKIES_FILE")
+    # Cookies priority: per-user upload > env file > browser fallback
+    cookies_file: str | None
+    if cookies_override is not None:
+        cookies_file = str(cookies_override)
+    else:
+        cookies_file = os.environ.get("YOUTUBE_COOKIES_FILE")
     cookies_browser = os.environ.get("YOUTUBE_COOKIES_FROM_BROWSER")
     if cookies_file:
         src = Path(cookies_file)
@@ -168,9 +172,11 @@ def _find_video_file(out_dir: Path) -> Path | None:
     return candidates[0] if candidates else None
 
 
-def _download_sync(url: str, out_dir: Path, max_minutes: int) -> DownloadResult:
+def _download_sync(
+    url: str, out_dir: Path, max_minutes: int, cookies_override: Path | None = None
+) -> DownloadResult:
     out_dir.mkdir(parents=True, exist_ok=True)
-    opts = _ydl_opts(out_dir, max_minutes)
+    opts = _ydl_opts(out_dir, max_minutes, cookies_override)
 
     try:
         with YoutubeDL(opts) as ydl:
@@ -213,6 +219,14 @@ def _download_sync(url: str, out_dir: Path, max_minutes: int) -> DownloadResult:
     )
 
 
-async def download(url: str, out_dir: Path, max_minutes: int = 60) -> DownloadResult:
-    """Download a YouTube URL to `out_dir`. Returns paths to video + extracted audio."""
-    return await asyncio.to_thread(_download_sync, url, out_dir, max_minutes)
+async def download(
+    url: str,
+    out_dir: Path,
+    max_minutes: int = 60,
+    cookies_file: Path | None = None,
+) -> DownloadResult:
+    """Download a YouTube URL to `out_dir`. Returns paths to video + extracted audio.
+
+    `cookies_file` overrides the env-based YOUTUBE_COOKIES_FILE — used for per-user
+    cookies uploaded via the API."""
+    return await asyncio.to_thread(_download_sync, url, out_dir, max_minutes, cookies_file)

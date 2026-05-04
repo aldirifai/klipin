@@ -46,6 +46,12 @@ export interface CheckoutResponse {
   amount_idr: number;
 }
 
+export interface CookiesStatus {
+  uploaded: boolean;
+  size_bytes: number | null;
+  uploaded_at: string | null;
+}
+
 export interface TokenResponse {
   access_token: string;
   token_type: string;
@@ -83,7 +89,9 @@ async function request<T>(
   init: RequestInit = {},
 ): Promise<T> {
   const headers = new Headers(init.headers);
-  headers.set("Content-Type", "application/json");
+  if (!(init.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
   const token = getToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
@@ -124,4 +132,12 @@ export const api = {
   clipUrl: (path: string) => `${API_URL}${path}`,
   createCheckout: () =>
     request<CheckoutResponse>("/payments/checkout", { method: "POST" }),
+  cookiesStatus: () => request<CookiesStatus>("/auth/cookies/status"),
+  uploadCookies: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<CookiesStatus>("/auth/cookies", { method: "POST", body: fd });
+  },
+  deleteCookies: () =>
+    request<void>("/auth/cookies", { method: "DELETE" }),
 };

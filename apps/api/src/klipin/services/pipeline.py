@@ -120,10 +120,14 @@ async def process_job(job_id: str) -> None:
 
         out_dir = _job_dir(job_id)
 
-        # Stage 1: download
+        # Stage 1: download (pakai cookies user kalau ada)
         await _set_status(job_id, JobStatus.DOWNLOADING)
+        user_cookies = settings.storage_dir / "users" / job.user_id / "cookies.txt"
         download = await youtube.download(
-            youtube_url, out_dir, max_minutes=settings.max_input_minutes
+            youtube_url,
+            out_dir,
+            max_minutes=settings.max_input_minutes,
+            cookies_file=user_cookies if user_cookies.exists() else None,
         )
         logger.info(
             "[job %s] downloaded %s (%.1fs)", job_id, download.title, download.duration_sec
