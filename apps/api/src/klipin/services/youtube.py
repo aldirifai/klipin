@@ -59,8 +59,16 @@ class _YDLLogger:
 
 def _ydl_opts(out_dir: Path, max_minutes: int) -> dict:
     opts: dict = {
-        # Lebih permissive: pakai any video+audio format, tapi tetep cap 1080p.
-        "format": "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
+        # Multi-tier fallback: prefer 1080p video+audio, tapi fallback ke
+        # whatever yang available. Beberapa video gak punya format yang
+        # match constraint ketat — better kasih lebih banyak escape hatch
+        # daripada gagal total.
+        "format": (
+            "bestvideo[height<=1080]+bestaudio/"
+            "best[height<=1080]/"
+            "bestvideo+bestaudio/"
+            "best"
+        ),
         "outtmpl": str(out_dir / "source.%(ext)s"),
         "merge_output_format": "mp4",
         "noplaylist": True,
