@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     whisper_model: str = "vaibhavs10/incredibly-fast-whisper"
     claude_model: str = "claude-sonnet-4-6"
 
+    # Render concurrency. Tiap clip pakai 2 FFmpeg pass (reframe+subtitle).
+    # Default 2 = max 2 clips paralel, bounded RAM. Naikin kalau VPS gede.
+    max_concurrent_renders: int = 2
+
     anthropic_api_key: str = ""
     replicate_api_token: str = ""
     redis_url: str = "redis://localhost:6379"

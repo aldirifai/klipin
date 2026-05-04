@@ -78,14 +78,16 @@ async def _render_clip(
     transcript: transcribe.Transcript,
     h: highlight.Highlight,
 ) -> None:
-    """Full render: cut → reframe (9:16) → burn subtitles. 3 FFmpeg passes."""
+    """Full render: cut → reframe (9:16) → burn subtitles.
+    Cut step pakai -c copy (lossless, low memory) — keyframe alignment ~1-2s
+    lebih maju OK karena reframe+subtitle yang final."""
     base = f"{job_id[:8]}_{int(h.start)}_{int(h.end)}"
     raw_path = _clip_dir() / f"{base}_raw.mp4"
     reframed_path = _clip_dir() / f"{base}_v.mp4"
     final_path = _clip_dir() / f"{base}.mp4"
 
     try:
-        await ffmpeg.cut_segment(source_path, h.start, h.end, raw_path, reencode=True)
+        await ffmpeg.cut_segment(source_path, h.start, h.end, raw_path, reencode=False)
         await reframe.reframe_to_vertical(raw_path, reframed_path)
         await subtitle.burn_in_subtitles(
             reframed_path, transcript, h.start, h.end, final_path
@@ -199,14 +201,16 @@ async def process_job(job_id: str) -> None:
             result.output_tokens,
         )
 
-        # Stage 4: render clips (parallel — cut + reframe + subtitle)
+        # Stage 4: render clips (concurrency-bounded). Tiap render butuh
+        # ~300-500MB RAM untuk FFmpeg encode HD; pakai semaphore biar gak OOM.
         await _set_status(job_id, JobStatus.RENDERING)
-        await asyncio.gather(
-            *[
-                _render_clip(job_id, video_path, transcript, h)
-                for h in result.highlights
-            ]
-        )
+        sem = asyncio.Semaphore(settings.max_concurrent_renders)
+
+        async def _render_with_sem(h: highlight.Highlight) -> None:
+            async with sem:
+                await _render_clip(job_id, video_path, transcript, h)
+
+        await asyncio.gather(*[_render_with_sem(h) for h in result.highlights])
         logger.info("[job %s] rendered %d clips", job_id, len(result.highlights))
 
         await _set_status(job_id, JobStatus.DONE)
