@@ -1,7 +1,7 @@
 """Storage cleanup CLI. Run via cron on host:
 
     docker compose exec api python -m klipin.scripts.cleanup_storage \\
-        --max-age-days 30 --dry-run
+        --max-age-days 7 --dry-run
 
 Apa yang dibersihkan:
 1. Job-job yang status FAILED + lebih lama dari N hari → hapus DB row + file
@@ -130,8 +130,8 @@ def main() -> None:
     parser.add_argument(
         "--max-age-days",
         type=int,
-        default=30,
-        help="Hapus job/clip lebih lama dari N hari (default 30)",
+        default=7,
+        help="Hapus job/clip lebih lama dari N hari (default 7)",
     )
     parser.add_argument("--dry-run", action="store_true", help="Preview tanpa hapus")
     args = parser.parse_args()

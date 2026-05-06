@@ -29,9 +29,10 @@ def _job_dir(job_id: str) -> Path:
     return path
 
 
-def _cleanup_source(job_id: str, video_path: Path, audio_path: Path) -> None:
-    """Hapus file source + intermediate setelah render selesai. Clips
-    disimpan terpisah di storage/clips/, gak ke-touch. Hemat disk space."""
+def _cleanup_source(job_id: str) -> None:
+    """Hapus file source + intermediate. Dipanggil dari finally block →
+    jalan baik job sukses maupun failed. Clip final di storage/clips/
+    gak ke-touch. Tanpa ini, source 1GB nyangkut tiap kali job fail."""
     job_dir = settings.storage_dir / "jobs" / job_id
     removed_bytes = 0
     if job_dir.exists():
@@ -232,11 +233,6 @@ async def process_job(job_id: str) -> None:
         await asyncio.gather(*[_render_with_sem(h) for h in result.highlights])
         logger.info("[job %s] rendered %d clips", job_id, len(result.highlights))
 
-        # Cleanup source files setelah render — clips udah disimpan terpisah
-        # di storage/clips/. Source mp4 (~bisa 1GB) + audio + transcript json
-        # gak diperlukan lagi setelah render done. Bisa dikurangi storage.
-        _cleanup_source(job_id, video_path, audio_path)
-
         await _set_status(job_id, JobStatus.DONE)
         logger.info("[job %s] pipeline complete", job_id)
 
@@ -261,3 +257,9 @@ async def process_job(job_id: str) -> None:
             JobStatus.FAILED,
             error=f"Unexpected: {e}\n{traceback.format_exc()[:500]}",
         )
+    finally:
+        # Cleanup source/intermediate (source.mp4 bisa 1GB, audio, transcript,
+        # highlights). Clip final di storage/clips/ aman, gak ke-touch.
+        # Di finally biar jalan baik sukses maupun failed — sebelum ini, job
+        # gagal nyangkutin file 1GB sampai cron 7-hari ngehapus.
+        _cleanup_source(job_id)
