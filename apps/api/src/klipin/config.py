@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     whisper_model: str = "vaibhavs10/incredibly-fast-whisper"
     claude_model: str = "claude-sonnet-4-6"
 
+    # Audio > chunk_minutes dipecah → transcribe paralel per-chunk →
+    # merge dengan timestamp offset. Chunk pendek = window contention
+    # CUDA di shared Replicate GPU lebih kecil + per-chunk retry independen.
+    transcribe_chunk_minutes: int = 10
+    transcribe_concurrency: int = 2
+
     # Render concurrency. Setelah refactor: 1 FFmpeg pass per clip
     # (cut+reframe+subtitle combined), ~250-350MB RAM peak. Default 2 =
     # 2 clips paralel — fit di VPS 2-4GB. Naikin ke 3-4 kalau RAM 8GB+.

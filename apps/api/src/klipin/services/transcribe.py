@@ -6,6 +6,7 @@ Output format: chunks dengan [start, end] timestamp pairs."""
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from pathlib import Path
 import replicate
 
 from klipin.config import settings
+from klipin.services import ffmpeg as ffmpeg_svc
 
 logger = logging.getLogger(__name__)
 
@@ -116,48 +118,39 @@ def _parse_replicate_output(payload: dict) -> Transcript:
     return Transcript(text=text, language=language, words=words)
 
 
-async def transcribe(audio_path: Path, language: str = "id") -> Transcript:
-    """Run Whisper on the audio file. Uploads to Replicate and waits for completion.
-
-    Pakai explicit version-pinned prediction instead of the 'official models'
-    endpoint — yang official endpoint cuma support a curated list of models
-    dan return 404 buat sebagian besar community models."""
-    if not settings.replicate_api_token:
-        raise TranscribeError("REPLICATE_API_TOKEN not configured")
-    if not audio_path.exists():
-        raise TranscribeError(f"audio file missing: {audio_path}")
-
-    client = replicate.Client(api_token=settings.replicate_api_token)
-    lang_name = _LANGUAGE_NAMES.get(language, language)
-
-    # Fetch latest version (handle 'owner/model' or 'owner/model:version')
+async def _resolve_version(client: replicate.Client) -> tuple[str, str]:
+    """Return (model_name, version_id). Handles 'owner/model' or 'owner/model:version'."""
     model_ref = settings.whisper_model
     if ":" in model_ref:
         model_name, version_id = model_ref.split(":", 1)
-    else:
-        model_name = model_ref
-        try:
-            model = await client.models.async_get(model_name)
-        except Exception as e:
-            raise TranscribeError(f"Model {model_name} not found on Replicate: {e}") from e
-        if not model.latest_version:
-            raise TranscribeError(f"Model {model_name} has no published version")
-        version_id = model.latest_version.id
+        return model_name, version_id
+    model_name = model_ref
+    try:
+        model = await client.models.async_get(model_name)
+    except Exception as e:
+        raise TranscribeError(f"Model {model_name} not found on Replicate: {e}") from e
+    if not model.latest_version:
+        raise TranscribeError(f"Model {model_name} has no published version")
+    return model_name, model.latest_version.id
 
-    logger.info(
-        "Uploading %s to Replicate %s (version %s)",
-        audio_path.name,
-        model_name,
-        version_id[:12],
-    )
 
-    # Retry logic untuk transient errors (CUDA OOM, GPU contention, dll).
-    # Replicate shared GPU sering kena race-condition w/ other tenants.
+async def _transcribe_one(
+    audio_path: Path,
+    language: str,
+    client: replicate.Client,
+    version_id: str,
+) -> Transcript:
+    """Single Replicate call w/ 3-retry untuk transient errors (CUDA OOM,
+    GPU contention). Timestamps di output relatif ke awal audio_path ini."""
+    lang_name = _LANGUAGE_NAMES.get(language, language)
     last_error: str | None = None
     for attempt in range(3):
         if attempt > 0:
             backoff = 5 * (2**attempt)  # 10s, 20s
-            logger.warning("Retry %d after %ds (last: %s)", attempt, backoff, last_error)
+            logger.warning(
+                "Retry %d for %s after %ds (last: %s)",
+                attempt, audio_path.name, backoff, last_error,
+            )
             await asyncio.sleep(backoff)
 
         with audio_path.open("rb") as fp:
@@ -191,7 +184,6 @@ async def transcribe(audio_path: Path, language: str = "id") -> Transcript:
                 )
             return _parse_replicate_output(output)
 
-        # Cek transient errors yang worth retry
         err = prediction.error or f"status={prediction.status}"
         is_transient = any(
             keyword in str(err).lower()
@@ -201,7 +193,87 @@ async def transcribe(audio_path: Path, language: str = "id") -> Transcript:
         if not is_transient:
             raise TranscribeError(f"Replicate prediction failed: {err}")
 
-    raise TranscribeError(f"Replicate prediction failed after 3 retries: {last_error}")
+    raise TranscribeError(
+        f"Replicate prediction failed after 3 retries on {audio_path.name}: {last_error}"
+    )
+
+
+def _merge_transcripts(parts: list[tuple[Transcript, float]]) -> Transcript:
+    """Merge per-chunk transcripts dengan timestamp offset. Tiap part:
+    (transcript, start_offset_sec). Boundary words mungkin sedikit
+    duplicate/missing karena cut di frame boundary — tradeoff yang
+    acceptable buat use-case social-clip."""
+    all_words: list[WordSpan] = []
+    text_parts: list[str] = []
+    language = parts[0][0].language if parts else "id"
+    for t, offset in parts:
+        for w in t.words:
+            all_words.append(WordSpan(word=w.word, start=w.start + offset, end=w.end + offset))
+        if t.text:
+            text_parts.append(t.text)
+    return Transcript(text=" ".join(text_parts), language=language, words=all_words)
+
+
+async def transcribe(audio_path: Path, language: str = "id") -> Transcript:
+    """Run Whisper on audio_path. Audio > `transcribe_chunk_minutes` dipecah
+    jadi chunk + transcribe paralel + merge — Replicate shared GPU sering
+    OOM di call panjang, chunk pendek = window contention lebih kecil +
+    per-chunk retry independen.
+
+    Pakai explicit version-pinned prediction instead of the 'official models'
+    endpoint — yang official endpoint cuma support a curated list of models
+    dan return 404 buat sebagian besar community models."""
+    if not settings.replicate_api_token:
+        raise TranscribeError("REPLICATE_API_TOKEN not configured")
+    if not audio_path.exists():
+        raise TranscribeError(f"audio file missing: {audio_path}")
+
+    client = replicate.Client(api_token=settings.replicate_api_token)
+    model_name, version_id = await _resolve_version(client)
+
+    chunk_seconds = settings.transcribe_chunk_minutes * 60
+    duration = await ffmpeg_svc.probe_duration(audio_path)
+
+    if duration <= chunk_seconds:
+        logger.info(
+            "Uploading %s (%.1fs) to Replicate %s (version %s)",
+            audio_path.name, duration, model_name, version_id[:12],
+        )
+        return await _transcribe_one(audio_path, language, client, version_id)
+
+    # Split → transcribe paralel → merge
+    chunks_dir = audio_path.parent / "chunks"
+    chunk_paths = await ffmpeg_svc.split_audio(audio_path, chunks_dir, chunk_seconds)
+
+    # Probe actual durations buat hitung offset cumulative (segment muxer
+    # cuts di frame boundary, durasi gak presisi target).
+    offsets: list[float] = []
+    cumulative = 0.0
+    for cp in chunk_paths:
+        offsets.append(cumulative)
+        cumulative += await ffmpeg_svc.probe_duration(cp)
+
+    logger.info(
+        "Transcribing %s (%.1fs) as %d chunks via %s (version %s)",
+        audio_path.name, duration, len(chunk_paths), model_name, version_id[:12],
+    )
+
+    sem = asyncio.Semaphore(settings.transcribe_concurrency)
+
+    async def _one(cp: Path) -> Transcript:
+        async with sem:
+            return await _transcribe_one(cp, language, client, version_id)
+
+    try:
+        transcripts = await asyncio.gather(*[_one(cp) for cp in chunk_paths])
+    finally:
+        for cp in chunk_paths:
+            with contextlib.suppress(OSError):
+                cp.unlink()
+        with contextlib.suppress(OSError):
+            chunks_dir.rmdir()
+
+    return _merge_transcripts(list(zip(transcripts, offsets)))
 
 
 def save_transcript(transcript: Transcript, path: Path) -> None:

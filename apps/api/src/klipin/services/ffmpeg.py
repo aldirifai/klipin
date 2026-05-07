@@ -95,6 +95,32 @@ async def probe_duration(path: Path) -> float:
         raise FFmpegError(f"ffprobe returned non-numeric duration: {stdout!r}") from e
 
 
+async def split_audio(source: Path, output_dir: Path, chunk_seconds: int) -> list[Path]:
+    """Split audio jadi chunk ~chunk_seconds via segment muxer (stream-copy,
+    no re-encode). Cuts di MP3 frame boundary (~26ms granularity) — durasi
+    aktual per-chunk dekat target tapi gak presisi, jadi caller harus
+    probe_duration() tiap chunk buat hitung offset yang akurat.
+    `-reset_timestamps 1` bikin tiap chunk mulai dari 0."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    pattern = output_dir / "chunk_%03d.mp3"
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(source),
+        "-f", "segment",
+        "-segment_time", str(chunk_seconds),
+        "-reset_timestamps", "1",
+        "-c", "copy",
+        str(pattern),
+    ]
+    rc, _, stderr = await _run(cmd)
+    if rc != 0:
+        raise FFmpegError(f"audio split failed (rc={rc}): {stderr[-500:]}")
+    chunks = sorted(output_dir.glob("chunk_*.mp3"))
+    if not chunks:
+        raise FFmpegError(f"audio split produced no chunks in {output_dir}")
+    return chunks
+
+
 async def extract_audio(source: Path, output: Path, *, sample_rate: int = 16000) -> Path:
     """Extract mono audio for transcription. mp3 64k @ 16kHz keeps upload tiny."""
     output.parent.mkdir(parents=True, exist_ok=True)
