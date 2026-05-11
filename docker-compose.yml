@@ -37,6 +37,10 @@ services:
     volumes:
       - klipin_storage:/app/storage
       - klipin_data:/app/data
+      # tmpfs untuk job workdir (source.mp4 1-2GB, audio chunks, intermediates).
+      # Pipeline cleanup di finally block jadi data ephemeral aman di RAM.
+      # Hanya butuh VPS dengan RAM 8GB+ — size cap di docker-compose level.
+      - klipin_jobs_tmp:/app/storage/jobs
       # Mount cookies.txt kalau yt-dlp kena bot detection (YouTube PO Token).
       # Aktifkan kalau perlu — lihat DEPLOY.md "Setup cookies untuk yt-dlp".
       # Compose akan error kalau file gak ada, jadi UNCOMMENT cuma kalau
@@ -75,3 +79,11 @@ networks:
 volumes:
   klipin_storage:
   klipin_data:
+  # tmpfs-backed volume — wiped tiap container restart. Cap 20GB.
+  # Cukup buat ~5-10 concurrent job (per job ~3-5GB temp).
+  # Naikin size= kalau concurrency lebih tinggi atau video lebih panjang.
+  klipin_jobs_tmp:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: "size=20g,mode=1777"

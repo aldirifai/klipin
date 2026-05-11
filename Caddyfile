@@ -1,6 +1,14 @@
 {$DOMAIN} {
     encode gzip zstd
 
+    # MP4 clip download path — cache aggressive di browser + CDN. Clip ID
+    # immutable (UUID + cleanup 7-14 hari), aman pakai immutable+max-age 30 hari.
+    @clip_files path_regexp ^/clips/[^/]+/file$
+    handle @clip_files {
+        header Cache-Control "public, max-age=2592000, immutable"
+        reverse_proxy api:8000
+    }
+
     # Backend API routes
     @api path /health /auth/* /jobs/* /clips/* /payments/* /docs /openapi.json /redoc
     handle @api {

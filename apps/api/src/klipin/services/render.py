@@ -116,7 +116,11 @@ async def render_clip_oneshot(
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
         "-c:a", "aac", "-b:a", "128k",
         "-movflags", "+faststart",
-        "-threads", "0",  # all available CPU cores
+        # 1 thread per FFmpeg. Pipeline jalan N render paralel (N = config
+        # max_concurrent_renders, default 4). Kalau tiap FFmpeg auto-pakai
+        # semua core (-threads 0), 4 paralel saling rebutan = thrashing.
+        # 1 thread × 4 paralel = 4 core utilized clean, throughput maksimal.
+        "-threads", "1",
         str(abs_output),
     ]
 

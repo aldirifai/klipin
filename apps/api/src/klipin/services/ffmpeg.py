@@ -58,6 +58,8 @@ async def cut_segment(
             "-c:v", "libx264", "-preset", "fast", "-crf", "20",
             "-c:a", "aac", "-b:a", "128k",
             "-movflags", "+faststart",
+            # 1 thread biar fit dengan render paralel di pipeline.
+            "-threads", "1",
             str(output),
         ]
     else:

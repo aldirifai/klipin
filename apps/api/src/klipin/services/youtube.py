@@ -88,7 +88,9 @@ def _ydl_opts(out_dir: Path, max_minutes: int, cookies_override: Path | None = N
         "keepvideo": True,
         "retries": 5,
         "fragment_retries": 5,
-        "concurrent_fragment_downloads": 4,
+        # 8 parallel fragments = saturasi 1Gbit network port. Default yt-dlp
+        # adalah 1 (sequential). Total bandwidth dibatasi network port VPS.
+        "concurrent_fragment_downloads": 8,
         "extractor_args": {
             # bgutil PO Token plugin (lihat bgutil-pot service di
             # docker-compose.yml) auto-generate token via HTTP. Plugin ke-load
