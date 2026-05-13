@@ -9,6 +9,8 @@ import asyncio
 import contextlib
 import json
 import logging
+import random
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -36,6 +38,26 @@ class Transcript:
     text: str
     language: str
     words: list[WordSpan]
+
+
+_RATE_LIMIT_RESET_PATTERN = re.compile(r"resets?\s*in\s*~?\s*(\d+)\s*s", re.IGNORECASE)
+
+
+def _is_rate_limit(err: object) -> bool:
+    s = str(err).lower()
+    return "429" in s or "throttled" in s or "rate limit" in s
+
+
+def _rate_limit_backoff(err: object, attempt: int) -> float:
+    """Replicate biasanya kasih hint 'resets in ~Ns' di error message —
+    pakai itu kalau ada. Fallback: 30s, 60s, 120s + jitter."""
+    m = _RATE_LIMIT_RESET_PATTERN.search(str(err))
+    if m:
+        try:
+            return float(m.group(1)) + random.uniform(2.0, 5.0)
+        except ValueError:
+            pass
+    return min(30 * (2**attempt), 120) + random.uniform(0.0, 5.0)
 
 
 # incredibly-fast-whisper accepts language in full English name
@@ -134,23 +156,35 @@ async def _resolve_version(client: replicate.Client) -> tuple[str, str]:
     return model_name, model.latest_version.id
 
 
+_MAX_TRANSCRIBE_ATTEMPTS = 5
+
+
 async def _transcribe_one(
     audio_path: Path,
     language: str,
     client: replicate.Client,
     version_id: str,
 ) -> Transcript:
-    """Single Replicate call w/ 3-retry untuk transient errors (CUDA OOM,
-    GPU contention). Timestamps di output relatif ke awal audio_path ini."""
+    """Single Replicate call w/ retry untuk transient errors (CUDA OOM,
+    GPU contention, 429 rate limit). Timestamps di output relatif ke awal
+    audio_path ini. 429 dapat backoff khusus (parse 'resets in Ns' atau
+    30/60/120s fallback) supaya gak buang-buang attempt."""
     lang_name = _LANGUAGE_NAMES.get(language, language)
     last_error: str | None = None
-    for attempt in range(3):
+    for attempt in range(_MAX_TRANSCRIBE_ATTEMPTS):
         if attempt > 0:
-            backoff = 5 * (2**attempt)  # 10s, 20s
-            logger.warning(
-                "Retry %d for %s after %ds (last: %s)",
-                attempt, audio_path.name, backoff, last_error,
-            )
+            if last_error and _is_rate_limit(last_error):
+                backoff = _rate_limit_backoff(last_error, attempt)
+                logger.warning(
+                    "Rate-limited on %s, sleeping %.1fs (attempt %d/%d): %s",
+                    audio_path.name, backoff, attempt + 1, _MAX_TRANSCRIBE_ATTEMPTS, last_error,
+                )
+            else:
+                backoff = min(5 * (2**attempt), 60) + random.uniform(0.0, 2.0)
+                logger.warning(
+                    "Retry %d/%d for %s after %.1fs (last: %s)",
+                    attempt + 1, _MAX_TRANSCRIBE_ATTEMPTS, audio_path.name, backoff, last_error,
+                )
             await asyncio.sleep(backoff)
 
         with audio_path.open("rb") as fp:
@@ -185,16 +219,16 @@ async def _transcribe_one(
             return _parse_replicate_output(output)
 
         err = prediction.error or f"status={prediction.status}"
-        is_transient = any(
+        is_transient = _is_rate_limit(err) or any(
             keyword in str(err).lower()
-            for keyword in ("cuda", "out of memory", "oom", "timeout", "rate")
+            for keyword in ("cuda", "out of memory", "oom", "timeout")
         )
         last_error = str(err)
         if not is_transient:
             raise TranscribeError(f"Replicate prediction failed: {err}")
 
     raise TranscribeError(
-        f"Replicate prediction failed after 3 retries on {audio_path.name}: {last_error}"
+        f"Replicate prediction failed after {_MAX_TRANSCRIBE_ATTEMPTS} retries on {audio_path.name}: {last_error}"
     )
 
 
@@ -260,12 +294,16 @@ async def transcribe(audio_path: Path, language: str = "id") -> Transcript:
 
     sem = asyncio.Semaphore(settings.transcribe_concurrency)
 
-    async def _one(cp: Path) -> Transcript:
+    async def _one(idx: int, cp: Path) -> Transcript:
         async with sem:
+            # Stagger initial fires (1.5s * idx) supaya N chunk pertama
+            # gak hit Replicate create endpoint bareng-bareng & kena burst-1.
+            if idx > 0:
+                await asyncio.sleep(min(idx * 1.5, 10.0))
             return await _transcribe_one(cp, language, client, version_id)
 
     try:
-        transcripts = await asyncio.gather(*[_one(cp) for cp in chunk_paths])
+        transcripts = await asyncio.gather(*[_one(i, cp) for i, cp in enumerate(chunk_paths)])
     finally:
         for cp in chunk_paths:
             with contextlib.suppress(OSError):

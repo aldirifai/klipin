@@ -34,7 +34,11 @@ class Settings(BaseSettings):
     # merge dengan timestamp offset. Chunk pendek = window contention
     # CUDA di shared Replicate GPU lebih kecil + per-chunk retry independen.
     transcribe_chunk_minutes: int = 10
-    transcribe_concurrency: int = 4
+    # Concurrency 2 = aman buat Replicate rate limit di akun dengan
+    # usage rendah / saldo baru top-up (Replicate kadang throttle akun
+    # baru ke ~6 req/min burst 1 walaupun saldo cukup). Naikin ke 4
+    # kalau akun udah established + saldo > $5.
+    transcribe_concurrency: int = 2
 
     # Render concurrency. Setelah refactor: 1 FFmpeg pass per clip
     # (cut+reframe+subtitle combined), ~250-350MB RAM peak.
