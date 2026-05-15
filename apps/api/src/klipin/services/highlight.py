@@ -189,7 +189,14 @@ async def detect_highlights(transcript: Transcript) -> HighlightResult:
         f"Pilih 5–10 highlight viral terbaik.\n\n{transcript_block}"
     )
 
-    client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+    client_kwargs: dict = {"api_key": settings.anthropic_api_key}
+    if settings.anthropic_base_url:
+        client_kwargs["base_url"] = settings.anthropic_base_url
+    client = AsyncAnthropic(**client_kwargs)
+
+    default_headers: dict[str, str] = {}
+    if settings.anthropic_proxy_secret:
+        default_headers["x-proxy-secret"] = settings.anthropic_proxy_secret
 
     try:
         response = await client.messages.parse(
@@ -204,6 +211,7 @@ async def detect_highlights(transcript: Transcript) -> HighlightResult:
             ],
             messages=[{"role": "user", "content": user_message}],
             output_format=HighlightsOutput,
+            extra_headers=default_headers or None,
         )
     except Exception as e:
         raise HighlightError(f"Claude call failed: {e}") from e

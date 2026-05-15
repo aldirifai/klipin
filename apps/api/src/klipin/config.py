@@ -53,6 +53,14 @@ class Settings(BaseSettings):
     max_concurrent_renders: int = 4
 
     anthropic_api_key: str = ""
+    # Override base URL Anthropic — buat reverse-proxy via Cloudflare Worker
+    # kalau deploy di region yang gak disupport Anthropic (HK/ID/CN/RU/IR).
+    # Empty = pakai api.anthropic.com langsung. Set ke URL Worker, mis.
+    # https://klipin-anth.<acct>.workers.dev — script: infra/anthropic-proxy/worker.js
+    anthropic_base_url: str = ""
+    # Optional shared secret kalau Worker dikonfigurasi dengan PROXY_SECRET.
+    # Dikirim sebagai header `x-proxy-secret` di tiap call.
+    anthropic_proxy_secret: str = ""
     replicate_api_token: str = ""
     redis_url: str = "redis://localhost:6379"
 
