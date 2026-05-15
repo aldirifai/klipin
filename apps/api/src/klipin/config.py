@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     # baru ke ~6 req/min burst 1 walaupun saldo cukup). Naikin ke 4
     # kalau akun udah established + saldo > $5.
     transcribe_concurrency: int = 2
+    # Whisper batch_size starting point. Pod shared di Replicate sering
+    # >40GB udah ke-alokasikan tenant lain, free < 1GB. batch_size=8
+    # butuh ~3GB allocation → OOM. Default 4 = ~1.5GB, dan retry akan
+    # step-down 4→2→1 kalau ketemu CUDA OOM.
+    transcribe_batch_size: int = 4
 
     # Render concurrency. Setelah refactor: 1 FFmpeg pass per clip
     # (cut+reframe+subtitle combined), ~250-350MB RAM peak.

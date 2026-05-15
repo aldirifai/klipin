@@ -48,6 +48,11 @@ def _is_rate_limit(err: object) -> bool:
     return "429" in s or "throttled" in s or "rate limit" in s
 
 
+def _is_cuda_oom(err: object) -> bool:
+    s = str(err).lower()
+    return "cuda" in s and ("out of memory" in s or "oom" in s)
+
+
 def _rate_limit_backoff(err: object, attempt: int) -> float:
     """Replicate biasanya kasih hint 'resets in ~Ns' di error message —
     pakai itu kalau ada. Fallback: 30s, 60s, 120s + jitter."""
@@ -58,6 +63,13 @@ def _rate_limit_backoff(err: object, attempt: int) -> float:
         except ValueError:
             pass
     return min(30 * (2**attempt), 120) + random.uniform(0.0, 5.0)
+
+
+def _cuda_oom_backoff(attempt: int) -> float:
+    """Pod shared Replicate sering ke-saturasi tenant lain. Backoff
+    panjang = lebih besar peluang Replicate route ke pod beda atau
+    pod evict state — 20s, 40s, 80s, 120s + jitter."""
+    return min(20 * (2**attempt), 120) + random.uniform(0.0, 5.0)
 
 
 # incredibly-fast-whisper accepts language in full English name
@@ -156,7 +168,7 @@ async def _resolve_version(client: replicate.Client) -> tuple[str, str]:
     return model_name, model.latest_version.id
 
 
-_MAX_TRANSCRIBE_ATTEMPTS = 5
+_MAX_TRANSCRIBE_ATTEMPTS = 6
 
 
 async def _transcribe_one(
@@ -167,10 +179,18 @@ async def _transcribe_one(
 ) -> Transcript:
     """Single Replicate call w/ retry untuk transient errors (CUDA OOM,
     GPU contention, 429 rate limit). Timestamps di output relatif ke awal
-    audio_path ini. 429 dapat backoff khusus (parse 'resets in Ns' atau
-    30/60/120s fallback) supaya gak buang-buang attempt."""
+    audio_path ini.
+
+    Adaptive batch_size: mulai dari settings.transcribe_batch_size, tiap
+    CUDA OOM step-down (4→2→1). Pod shared Replicate sering ke-saturasi
+    tenant lain (>40GB allocated, <1GB free) — batch_size=1 cuma butuh
+    ~500MB VRAM marginal, biasanya fit walaupun pod hampir penuh.
+
+    429 & CUDA OOM dapat backoff khusus (lebih panjang) supaya retry gak
+    buang-buang attempt di pod state yang sama."""
     lang_name = _LANGUAGE_NAMES.get(language, language)
     last_error: str | None = None
+    batch_size = max(1, settings.transcribe_batch_size)
     for attempt in range(_MAX_TRANSCRIBE_ATTEMPTS):
         if attempt > 0:
             if last_error and _is_rate_limit(last_error):
@@ -178,6 +198,12 @@ async def _transcribe_one(
                 logger.warning(
                     "Rate-limited on %s, sleeping %.1fs (attempt %d/%d): %s",
                     audio_path.name, backoff, attempt + 1, _MAX_TRANSCRIBE_ATTEMPTS, last_error,
+                )
+            elif last_error and _is_cuda_oom(last_error):
+                backoff = _cuda_oom_backoff(attempt)
+                logger.warning(
+                    "CUDA OOM on %s, sleeping %.1fs + batch_size=%d (attempt %d/%d)",
+                    audio_path.name, backoff, batch_size, attempt + 1, _MAX_TRANSCRIBE_ATTEMPTS,
                 )
             else:
                 backoff = min(5 * (2**attempt), 60) + random.uniform(0.0, 2.0)
@@ -196,7 +222,7 @@ async def _transcribe_one(
                         "task": "transcribe",
                         "language": lang_name,
                         "timestamp": "word",
-                        "batch_size": 8,  # konservatif buat hindari CUDA OOM
+                        "batch_size": batch_size,
                         "diarise_audio": False,
                     },
                 )
@@ -219,13 +245,18 @@ async def _transcribe_one(
             return _parse_replicate_output(output)
 
         err = prediction.error or f"status={prediction.status}"
+        err_str = str(err)
         is_transient = _is_rate_limit(err) or any(
-            keyword in str(err).lower()
+            keyword in err_str.lower()
             for keyword in ("cuda", "out of memory", "oom", "timeout")
         )
-        last_error = str(err)
+        last_error = err_str
         if not is_transient:
             raise TranscribeError(f"Replicate prediction failed: {err}")
+        # Step-down batch_size kalau CUDA OOM — pod shared udah saturasi,
+        # next attempt butuh footprint lebih kecil supaya fit di sisa VRAM.
+        if _is_cuda_oom(err) and batch_size > 1:
+            batch_size = max(1, batch_size // 2)
 
     raise TranscribeError(
         f"Replicate prediction failed after {_MAX_TRANSCRIBE_ATTEMPTS} retries on {audio_path.name}: {last_error}"
